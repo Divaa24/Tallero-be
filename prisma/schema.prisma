@@ -1,3 +1,8 @@
+// ==============================================================================
+// TALLERO AUTO — PRISMA SCHEMA (PostgreSQL 16 + Prisma 7)
+// Mengacu penuh pada AGENTS.md §5 & §7
+// ==============================================================================
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -6,19 +11,46 @@ datasource db {
   provider = "postgresql"
 }
 
+// ==============================================================================
+// ENUMS
+// ==============================================================================
+
 enum Role {
   ADMIN
   MECHANIC
   CUSTOMER
 }
 
+enum VehicleType {
+  CAR
+  MOTORCYCLE
+}
+
 enum BookingStatus {
   PENDING
   CHECKED_IN
   IN_PROGRESS
+  WAITING_APPROVAL
   READY_FOR_PICKUP
   COMPLETED
   CANCELLED
+  NO_SHOW
+}
+
+enum ItemType {
+  SERVICE
+  SPAREPART
+}
+
+enum ItemSource {
+  CUSTOMER_BOOKING
+  MECHANIC_ADDED
+}
+
+enum ApprovalStatus {
+  APPROVED
+  PENDING_APPROVAL
+  REJECTED
 }
 
 enum PhotoType {
@@ -26,151 +58,496 @@ enum PhotoType {
   AFTER
 }
 
+enum PaymentType {
+  INVOICE
+  TIP
+}
+
 enum PaymentMethod {
   CASH
-  TRANSFER
-  QRIS
+  MIDTRANS
 }
 
 enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+  REFUNDED
+  DUPLICATE
+}
+
+enum BookingPaymentStatus {
   UNPAID
   PAID
 }
 
-model User {
-  id           Int           @id @default(autoincrement())
-  name         String        @db.VarChar(100)
-  email        String        @unique @db.VarChar(100)
-  password     String        @db.VarChar(255)
-  phone        String        @db.VarChar(20)
-  address      String?       @db.Text
-  avatar       String?       @map("avatar_url")
-  role         Role          @default(CUSTOMER)
-  isActive     Boolean       @default(true) @map("is_active")
-  isVerified   Boolean       @default(false) @map("is_verified")
-  otpCode      String?       @map("otp_code") @db.VarChar(10)
-  otpExpiresAt DateTime?     @map("otp_expires_at")
-  vehicles     Vehicle[]
-  bookings     Booking[]     @relation("CustomerBookings")
-  assignedJobs Booking[]     @relation("MechanicBookings")
-  reviews      Review[]
-  statusLogs   BookingLog[]  @relation("ActorLogs")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+enum NotificationType {
+  BOOKING_STATUS
+  APPROVAL_REQUEST
+  PAYMENT
+  SERVICE_REMINDER
+  SYSTEM
+}
 
+enum ReminderStatus {
+  SCHEDULED
+  REMINDED
+  DUE
+  DONE
+  CANCELLED
+}
+
+// ==============================================================================
+// AUTH & USER MODELS
+// ==============================================================================
+
+model User {
+  id                 Int       @id @default(autoincrement())
+  name               String    @db.VarChar(100)
+  email              String    @unique @db.VarChar(150)
+  passwordHash       String    @map("password_hash") @db.VarChar(255)
+  phone              String    @db.VarChar(30)
+  address            String?   @db.Text
+  avatarKey          String?   @map("avatar_key") @db.VarChar(255)
+  role               Role      @default(CUSTOMER)
+  outletId           Int?      @map("outlet_id")
+  outlet             Outlet?   @relation("OutletStaff", fields: [outletId], references: [id], onDelete: Restrict)
+  isActive           Boolean   @default(true) @map("is_active")
+  isVerified         Boolean   @default(false) @map("is_verified")
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  tokenVersion       Int       @default(0) @map("token_version")
+  failedLoginCount   Int       @default(0) @map("failed_login_count")
+  lockedUntil        DateTime? @map("locked_until")
+  googleId           String?   @unique @map("google_id") @db.VarChar(100)
+  lastLoginAt        DateTime? @map("last_login_at")
+  deletedAt          DateTime? @map("deleted_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  registrationOtps     RegistrationOtp[]
+  passwordResetTokens  PasswordResetToken[]
+  refreshTokens        RefreshToken[]
+  deviceTokens         DeviceToken[]
+  vehicles             Vehicle[]
+  customerBookings     Booking[]            @relation("CustomerBookings")
+  mechanicBookings     Booking[]            @relation("MechanicBookings")
+  cancelledBookings    Booking[]            @relation("CancelledBookings")
+  requestedItems       BookingItem[]        @relation("RequestedBookingItems")
+  decidedItems         BookingItem[]        @relation("DecidedBookingItems")
+  uploadedPhotos       BookingPhoto[]
+  bookingLogs          BookingLog[]
+  receivedCashPayments Payment[]            @relation("ReceivedCashPayments")
+  receivedTips         Payment[]            @relation("TipRecipientMechanic")
+  customerReviews      Review[]             @relation("CustomerReviews")
+  mechanicReviews      Review[]             @relation("MechanicReviews")
+  notifications        Notification[]
+  serviceReminders     ServiceReminder[]
+  auditLogs            AuditLog[]
+
+  @@index([role, outletId])
+  @@index([deletedAt])
   @@map("users")
 }
 
-model Outlet {
+model RegistrationOtp {
+  id         Int       @id @default(autoincrement())
+  userId     Int       @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String    @map("code_hash") @db.VarChar(128)
+  expiresAt  DateTime  @map("expires_at")
+  attempts   Int       @default(0)
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("registration_otps")
+}
+
+model PasswordResetToken {
   id        Int       @id @default(autoincrement())
-  name      String    @db.VarChar(100)
-  address   String    @db.Text
-  phone     String?   @db.VarChar(20)
-  latitude  Decimal   @db.Decimal(10, 8)
-  longitude Decimal   @db.Decimal(11, 8)
-  isActive  Boolean   @default(true) @map("is_active")
-  bookings  Booking[]
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash") @db.VarChar(128)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model RefreshToken {
+  id           Int            @id @default(autoincrement())
+  userId       Int            @map("user_id")
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String         @unique @map("token_hash") @db.VarChar(128)
+  familyId     String         @map("family_id") @db.VarChar(64)
+  expiresAt    DateTime       @map("expires_at")
+  revokedAt    DateTime?      @map("revoked_at")
+  replacedById Int?           @map("replaced_by_id")
+  replacedBy   RefreshToken?  @relation("TokenRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     RefreshToken[] @relation("TokenRotation")
+  userAgent    String?        @map("user_agent") @db.VarChar(255)
+  ip           String?        @db.VarChar(64)
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+model DeviceToken {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expoPushToken String   @unique @map("expo_push_token") @db.VarChar(255)
+  platform      String   @db.VarChar(20)
+  lastSeenAt    DateTime @default(now()) @map("last_seen_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("device_tokens")
+}
+
+// ==============================================================================
+// MASTER DATA MODELS
+// ==============================================================================
+
+model Outlet {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(100)
+  address      String    @db.Text
+  phone        String?   @db.VarChar(30)
+  latitude     Float
+  longitude    Float
+  openDays     Json      @map("open_days")
+  openTime     String    @map("open_time") @db.VarChar(5)
+  closeTime    String    @map("close_time") @db.VarChar(5)
+  slotMinutes  Int       @map("slot_minutes")
+  slotCapacity Int       @map("slot_capacity")
+  timezone     String    @default("Asia/Jakarta") @db.VarChar(50)
+  isActive     Boolean   @default(true) @map("is_active")
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  staff    User[]          @relation("OutletStaff")
+  closures OutletClosure[]
+  bookings Booking[]
+  reviews  Review[]
+
+  @@index([isActive, deletedAt])
   @@map("outlets")
 }
 
+model OutletClosure {
+  id        Int      @id @default(autoincrement())
+  outletId  Int      @map("outlet_id")
+  outlet    Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  reason    String   @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([outletId, date])
+  @@map("outlet_closures")
+}
+
 model Category {
-  id       Int       @id @default(autoincrement())
-  name     String    @db.VarChar(100)
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(100)
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
   services Service[]
 
+  @@index([deletedAt])
   @@map("categories")
 }
 
 model Service {
-  id            Int       @id @default(autoincrement())
-  categoryId    Int       @map("category_id")
-  category      Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  name          String    @db.VarChar(100)
-  price         Decimal   @db.Decimal(12, 2)
-  estimatedTime Int       @map("estimated_time")
-  bookings      Booking[]
+  id                   Int          @id @default(autoincrement())
+  categoryId           Int          @map("category_id")
+  category             Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name                 String       @db.VarChar(100)
+  description          String?      @db.Text
+  price                Int
+  estimatedMinutes     Int          @map("estimated_minutes")
+  vehicleType          VehicleType? @map("vehicle_type")
+  reminderIntervalDays Int?         @map("reminder_interval_days")
+  reminderIntervalKm   Int?         @map("reminder_interval_km")
+  isActive             Boolean      @default(true) @map("is_active")
+  deletedAt            DateTime?    @map("deleted_at")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
 
+  bookingItems     BookingItem[]
+  serviceReminders ServiceReminder[]
+
+  @@index([categoryId, isActive, deletedAt])
   @@map("services")
 }
 
-model Vehicle {
-  id           Int       @id @default(autoincrement())
-  userId       Int       @map("user_id")
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  licensePlate String    @map("license_plate") @db.VarChar(20)
-  brand        String    @db.VarChar(50)
-  model        String    @db.VarChar(50)
-  type         String    @default("Car") @db.VarChar(20)
-  year         Int
-  bookings     Booking[]
+model Sparepart {
+  id        Int       @id @default(autoincrement())
+  sku       String    @unique @db.VarChar(60)
+  name      String    @db.VarChar(150)
+  price     Int
+  stock     Int       @default(0)
+  unit      String    @db.VarChar(30)
+  isActive  Boolean   @default(true) @map("is_active")
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
+  bookingItems BookingItem[]
+
+  @@index([isActive, deletedAt])
+  @@map("spareparts")
+}
+
+model Vehicle {
+  id             Int         @id @default(autoincrement())
+  userId         Int         @map("user_id")
+  user           User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  plateNumber    String      @map("plate_number") @db.VarChar(20)
+  // Kolom bantu unik untuk soft delete: bernilai plateNumber saat aktif, NULL saat dihapus
+  activePlate    String?     @unique @map("active_plate") @db.VarChar(20)
+  brand          String      @db.VarChar(50)
+  model          String      @db.VarChar(50)
+  type           VehicleType
+  year           Int
+  color          String?     @db.VarChar(30)
+  lastOdometerKm Int?        @map("last_odometer_km")
+  deletedAt      DateTime?   @map("deleted_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  bookings         Booking[]
+  serviceReminders ServiceReminder[]
+
+  @@index([userId, deletedAt])
   @@map("vehicles")
 }
 
-model Booking {
-  id            Int            @id @default(autoincrement())
-  bookingCode   String         @unique @map("booking_code") @db.VarChar(50)
-  userId        Int            @map("user_id")
-  user          User           @relation("CustomerBookings", fields: [userId], references: [id], onDelete: Cascade)
-  outletId      Int            @map("outlet_id")
-  outlet        Outlet         @relation(fields: [outletId], references: [id], onDelete: Cascade)
-  vehicleId     Int            @map("vehicle_id")
-  vehicle       Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  serviceId     Int            @map("service_id")
-  service       Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  mechanicId    Int?           @map("mechanic_id")
-  mechanic      User?          @relation("MechanicBookings", fields: [mechanicId], references: [id], onDelete: SetNull)
-  bookingDate   DateTime       @map("booking_date")
-  status        BookingStatus  @default(PENDING)
-  customerNotes String?        @map("customer_notes") @db.Text
-  adminNotes    String?        @map("admin_notes") @db.Text
-  paymentMethod PaymentMethod? @map("payment_method")
-  paymentStatus PaymentStatus  @default(UNPAID) @map("payment_status")
-  totalPrice    Decimal?       @map("total_price") @db.Decimal(12, 2)
-  photos        BookingPhoto[]
-  statusLogs    BookingLog[]
-  review        Review?
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
+// ==============================================================================
+// TRANSACTION & WORKSHOP OPERATIONS MODELS
+// ==============================================================================
 
+model Booking {
+  id            Int                  @id @default(autoincrement())
+  code          String               @unique @db.VarChar(50)
+  customerId    Int                  @map("customer_id")
+  customer      User                 @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: Restrict)
+  outletId      Int                  @map("outlet_id")
+  outlet        Outlet               @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  vehicleId     Int                  @map("vehicle_id")
+  vehicle       Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  mechanicId    Int?                 @map("mechanic_id")
+  mechanic      User?                @relation("MechanicBookings", fields: [mechanicId], references: [id], onDelete: Restrict)
+  scheduledAt   DateTime             @map("scheduled_at")
+  slotEndAt     DateTime             @map("slot_end_at")
+  status        BookingStatus        @default(PENDING)
+  queueDate     DateTime?            @map("queue_date") @db.Date
+  queueNumber   Int?                 @map("queue_number")
+  isLate        Boolean              @default(false) @map("is_late")
+  checkedInAt   DateTime?            @map("checked_in_at")
+  startedAt     DateTime?            @map("started_at")
+  readyAt       DateTime?            @map("ready_at")
+  completedAt   DateTime?            @map("completed_at")
+  cancelledAt   DateTime?            @map("cancelled_at")
+  cancelledById Int?                 @map("cancelled_by_id")
+  cancelledBy   User?                @relation("CancelledBookings", fields: [cancelledById], references: [id], onDelete: Restrict)
+  cancelReason  String?              @map("cancel_reason") @db.Text
+  odometerKm    Int?                 @map("odometer_km")
+  customerNotes String?              @map("customer_notes") @db.Text
+  staffNotes    String?              @map("staff_notes") @db.Text
+  total         Int                  @default(0)
+  paymentStatus BookingPaymentStatus @default(UNPAID) @map("payment_status")
+  invoiceNumber String?              @unique @map("invoice_number") @db.VarChar(60)
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  items            BookingItem[]
+  photos           BookingPhoto[]
+  logs             BookingLog[]
+  payments         Payment[]
+  review           Review?
+  serviceReminders ServiceReminder[]
+
+  @@unique([outletId, queueDate, queueNumber])
+  @@index([outletId, status, queueDate, queueNumber])
+  @@index([customerId, status])
+  @@index([scheduledAt])
   @@map("bookings")
 }
 
-model BookingPhoto {
-  id        Int       @id @default(autoincrement())
-  bookingId Int       @map("booking_id")
-  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  photoPath String    @map("photo_path") @db.Text
-  type      PhotoType
-  createdAt DateTime  @default(now()) @map("created_at")
+model BookingItem {
+  id             Int            @id @default(autoincrement())
+  bookingId      Int            @map("booking_id")
+  booking        Booking        @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  type           ItemType
+  serviceId      Int?           @map("service_id")
+  service        Service?       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  sparepartId    Int?           @map("sparepart_id")
+  sparepart      Sparepart?     @relation(fields: [sparepartId], references: [id], onDelete: Restrict)
+  nameSnapshot   String         @map("name_snapshot") @db.VarChar(150)
+  unitPrice      Int            @map("unit_price")
+  quantity       Int            @default(1)
+  subtotal       Int
+  source         ItemSource
+  approvalStatus ApprovalStatus @map("approval_status")
+  requestedById  Int            @map("requested_by_id")
+  requestedBy    User           @relation("RequestedBookingItems", fields: [requestedById], references: [id], onDelete: Restrict)
+  decidedById    Int?           @map("decided_by_id")
+  decidedBy      User?          @relation("DecidedBookingItems", fields: [decidedById], references: [id], onDelete: Restrict)
+  decidedAt      DateTime?      @map("decided_at")
+  rejectReason   String?        @map("reject_reason") @db.Text
+  stockDeducted  Boolean        @default(false) @map("stock_deducted")
+  note           String?        @db.Text
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
 
+  @@index([bookingId, approvalStatus])
+  @@map("booking_items")
+}
+
+model BookingPhoto {
+  id           Int       @id @default(autoincrement())
+  bookingId    Int       @map("booking_id")
+  booking      Booking   @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  type         PhotoType
+  storageKey   String    @map("storage_key") @db.VarChar(255)
+  mimeType     String    @map("mime_type") @db.VarChar(50)
+  sizeBytes    Int       @map("size_bytes")
+  caption      String?   @db.VarChar(255)
+  uploadedById Int       @map("uploaded_by_id")
+  uploadedBy   User      @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([bookingId, type, deletedAt])
   @@map("booking_photos")
 }
 
 model BookingLog {
-  id        Int           @id @default(autoincrement())
-  bookingId Int           @map("booking_id")
-  booking   Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  actorId   Int           @map("actor_id")
-  actor     User          @relation("ActorLogs", fields: [actorId], references: [id], onDelete: Cascade)
-  status    BookingStatus
-  notes     String?       @db.Text
-  createdAt DateTime      @default(now()) @map("created_at")
+  id         Int            @id @default(autoincrement())
+  bookingId  Int            @map("booking_id")
+  booking    Booking        @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  actorId    Int?           @map("actor_id")
+  actor      User?          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  actorRole  String?        @map("actor_role") @db.VarChar(20)
+  fromStatus BookingStatus? @map("from_status")
+  toStatus   BookingStatus  @map("to_status")
+  note       String?        @db.Text
+  createdAt  DateTime       @default(now()) @map("created_at")
 
+  @@index([bookingId, createdAt])
   @@map("booking_logs")
 }
 
+model Payment {
+  id                    Int           @id @default(autoincrement())
+  bookingId             Int           @map("booking_id")
+  booking               Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  type                  PaymentType
+  method                PaymentMethod
+  orderId               String        @unique @map("order_id") @db.VarChar(60)
+  amount                Int
+  status                PaymentStatus @default(PENDING)
+  snapToken             String?       @map("snap_token") @db.VarChar(255)
+  redirectUrl           String?       @map("redirect_url") @db.Text
+  midtransTransactionId String?       @map("midtrans_transaction_id") @db.VarChar(100)
+  midtransPaymentType   String?       @map("midtrans_payment_type") @db.VarChar(50)
+  expiresAt             DateTime?     @map("expires_at")
+  paidAt                DateTime?     @map("paid_at")
+  receivedById          Int?          @map("received_by_id")
+  receivedBy            User?         @relation("ReceivedCashPayments", fields: [receivedById], references: [id], onDelete: Restrict)
+  recipientMechanicId   Int?          @map("recipient_mechanic_id")
+  recipientMechanic     User?         @relation("TipRecipientMechanic", fields: [recipientMechanicId], references: [id], onDelete: Restrict)
+  rawNotification       Json?         @map("raw_notification")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  @@index([bookingId])
+  @@map("payments")
+}
+
 model Review {
+  id         Int      @id @default(autoincrement())
+  bookingId  Int      @unique @map("booking_id")
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  customerId Int      @map("customer_id")
+  customer   User     @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: Restrict)
+  mechanicId Int?     @map("mechanic_id")
+  mechanic   User?    @relation("MechanicReviews", fields: [mechanicId], references: [id], onDelete: Restrict)
+  outletId   Int      @map("outlet_id")
+  outlet     Outlet   @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  rating     Int
+  comment    String?  @db.Text
+  isHidden   Boolean  @default(false) @map("is_hidden")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([outletId, isHidden])
+  @@index([mechanicId, isHidden])
+  @@map("reviews")
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int              @map("user_id")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type      NotificationType
+  title     String           @db.VarChar(150)
+  body      String           @db.Text
+  data      Json?
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model ServiceReminder {
+  id              Int            @id @default(autoincrement())
+  vehicleId       Int            @map("vehicle_id")
+  vehicle         Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  userId          Int            @map("user_id")
+  user            User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  serviceId       Int            @map("service_id")
+  service         Service        @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  sourceBookingId Int            @map("source_booking_id")
+  sourceBooking   Booking        @relation(fields: [sourceBookingId], references: [id], onDelete: Restrict)
+  dueDate         DateTime       @map("due_date")
+  dueOdometerKm   Int?           @map("due_odometer_km")
+  status          ReminderStatus @default(SCHEDULED)
+  remindedAt      DateTime?      @map("reminded_at")
+  dueNotifiedAt   DateTime?      @map("due_notified_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@index([status, dueDate])
+  @@index([vehicleId, serviceId, status])
+  @@map("service_reminders")
+}
+
+model AuditLog {
   id        Int      @id @default(autoincrement())
-  bookingId Int      @unique @map("booking_id")
-  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  userId    Int      @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  rating    Int      @default(5)
-  comment   String?  @db.Text
+  actorId   Int?     @map("actor_id")
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action    String   @db.VarChar(80)
+  entity    String   @db.VarChar(60)
+  entityId  String   @map("entity_id") @db.VarChar(60)
+  before    Json?
+  after     Json?
+  ip        String?  @db.VarChar(64)
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@map("reviews")
+  @@index([entity, entityId])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
 }

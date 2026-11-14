@@ -1,5 +1,30 @@
-node_modules
-# Keep environment variables out of version control
-.env
+# dependencies
+node_modules/
+/node_modules
 
+# environment variables
+.env
+.env.*
+
+# private uploads & file storage
+storage/
+
+# production build
+/dist
+
+# editor configs
+.vscode/
+.idea/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# prisma generated
 /src/generated/prisma
+
+# AI tools & agent skills
+.agents/
+.claude/
+.windsurf/
+skills-lock.json

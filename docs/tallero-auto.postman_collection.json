@@ -1,0 +1,2635 @@
+{
+  "info": {
+    "name": "Tallero Auto API Collection",
+    "_postman_id": "tallero-auto-api-v1",
+    "description": "Koleksi 106 endpoint resmi Tallero Auto API dengan auto-token JWT injection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "[GET] /health - Liveness probe service",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Liveness probe service"
+          }
+        },
+        {
+          "name": "[GET] /ready - Readiness probe database connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ready",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ready"
+              ]
+            },
+            "description": "Readiness probe database connection"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "[POST] /auth/register - Pendaftaran customer baru (hanya CUSTOMER)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Pendaftaran customer baru (hanya CUSTOMER)"
+          }
+        },
+        {
+          "name": "[POST] /auth/verify-otp - Verifikasi OTP 6 digit registrasi",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-otp"
+              ]
+            },
+            "description": "Verifikasi OTP 6 digit registrasi"
+          }
+        },
+        {
+          "name": "[POST] /auth/resend-otp - Kirim ulang OTP registrasi (cooldown 60s)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/resend-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "resend-otp"
+              ]
+            },
+            "description": "Kirim ulang OTP registrasi (cooldown 60s)"
+          }
+        },
+        {
+          "name": "[POST] /auth/login - Login dengan email dan password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login dengan email dan password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@tallero.test\",\n  \"password\": \"AdminTallero123!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.data && jsonData.data.accessToken) {",
+                  "        pm.environment.set('accessToken', jsonData.data.accessToken);",
+                  "        console.log('AccessToken disimpan ke environment: ' + jsonData.data.accessToken);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "[POST] /auth/refresh - Rotasi refresh token dan penerbitan access token baru",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Rotasi refresh token dan penerbitan access token baru"
+          }
+        },
+        {
+          "name": "[POST] /auth/logout - Logout sesi saat ini dan cabut refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Logout sesi saat ini dan cabut refresh token"
+          }
+        },
+        {
+          "name": "[POST] /auth/logout-all - Logout dari semua perangkat dan inkremen tokenVersion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout-all"
+              ]
+            },
+            "description": "Logout dari semua perangkat dan inkremen tokenVersion"
+          }
+        },
+        {
+          "name": "[POST] /auth/forgot-password - Permintaan link reset password via email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "Permintaan link reset password via email"
+          }
+        },
+        {
+          "name": "[POST] /auth/reset-password - Reset password menggunakan token acak email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "Reset password menggunakan token acak email"
+          }
+        },
+        {
+          "name": "[POST] /auth/change-password - Ganti password user aktif",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "change-password"
+              ]
+            },
+            "description": "Ganti password user aktif"
+          }
+        },
+        {
+          "name": "[GET] /auth/me - Dapatkan profil user aktif saat ini",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Dapatkan profil user aktif saat ini"
+          }
+        },
+        {
+          "name": "[PATCH] /auth/me - Perbarui profil nama dan telepon user aktif",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Perbarui profil nama dan telepon user aktif"
+          }
+        },
+        {
+          "name": "[POST] /auth/me/avatar - Unggah avatar foto profil user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me/avatar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me",
+                "avatar"
+              ]
+            },
+            "description": "Unggah avatar foto profil user"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "[GET] /files/{kind}/{id} - Akses file privat melalui signed URL terverifikasi",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/files/:kind/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "files",
+                ":kind",
+                ":id"
+              ]
+            },
+            "description": "Akses file privat melalui signed URL terverifikasi"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Outlets",
+      "item": [
+        {
+          "name": "[GET] /outlets - Daftar cabang outlet aktif",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/outlets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "outlets"
+              ]
+            },
+            "description": "Daftar cabang outlet aktif"
+          }
+        },
+        {
+          "name": "[GET] /outlets/{id} - Detail outlet berdasarkan ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/outlets/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "outlets",
+                ":id"
+              ]
+            },
+            "description": "Detail outlet berdasarkan ID"
+          }
+        },
+        {
+          "name": "[GET] /outlets/{id}/availability - Cek ketersediaan slot waktu servis outlet",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/outlets/:id/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "outlets",
+                ":id",
+                "availability"
+              ]
+            },
+            "description": "Cek ketersediaan slot waktu servis outlet"
+          }
+        },
+        {
+          "name": "[GET] /outlets/{id}/reviews - Ulasan dan rating publik untuk cabang outlet",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/outlets/:id/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "outlets",
+                ":id",
+                "reviews"
+              ]
+            },
+            "description": "Ulasan dan rating publik untuk cabang outlet"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "item": [
+        {
+          "name": "[GET] /categories - Daftar kategori layanan aktif",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "description": "Daftar kategori layanan aktif"
+          }
+        },
+        {
+          "name": "[GET] /services - Daftar katalog layanan servis aktif",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services"
+              ]
+            },
+            "description": "Daftar katalog layanan servis aktif"
+          }
+        },
+        {
+          "name": "[GET] /services/{id} - Detail layanan servis berdasarkan ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/services/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services",
+                ":id"
+              ]
+            },
+            "description": "Detail layanan servis berdasarkan ID"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Spareparts",
+      "item": [
+        {
+          "name": "[GET] /spareparts - Daftar sparepart yang tersedia untuk customer",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/spareparts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "spareparts"
+              ]
+            },
+            "description": "Daftar sparepart yang tersedia untuk customer"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vehicles",
+      "item": [
+        {
+          "name": "[GET] /vehicles - Daftar kendaraan milik customer aktif",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vehicles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vehicles"
+              ]
+            },
+            "description": "Daftar kendaraan milik customer aktif"
+          }
+        },
+        {
+          "name": "[POST] /vehicles - Mendaftarkan kendaraan baru customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vehicles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vehicles"
+              ]
+            },
+            "description": "Mendaftarkan kendaraan baru customer"
+          }
+        },
+        {
+          "name": "[GET] /vehicles/{id} - Detail kendaraan customer berdasarkan ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vehicles/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vehicles",
+                ":id"
+              ]
+            },
+            "description": "Detail kendaraan customer berdasarkan ID"
+          }
+        },
+        {
+          "name": "[PATCH] /vehicles/{id} - Perbarui data kendaraan customer",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vehicles/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vehicles",
+                ":id"
+              ]
+            },
+            "description": "Perbarui data kendaraan customer"
+          }
+        },
+        {
+          "name": "[DELETE] /vehicles/{id} - Hapus (soft delete) kendaraan customer",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vehicles/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vehicles",
+                ":id"
+              ]
+            },
+            "description": "Hapus (soft delete) kendaraan customer"
+          }
+        },
+        {
+          "name": "[GET] /vehicles/{id}/history - Riwayat seluruh servis selesai untuk kendaraan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vehicles/:id/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vehicles",
+                ":id",
+                "history"
+              ]
+            },
+            "description": "Riwayat seluruh servis selesai untuk kendaraan"
+          }
+        },
+        {
+          "name": "[GET] /vehicles/{id}/reminders - Daftar pengingat servis rutin kendaraan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/vehicles/:id/reminders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vehicles",
+                ":id",
+                "reminders"
+              ]
+            },
+            "description": "Daftar pengingat servis rutin kendaraan"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "[GET] /bookings - Daftar riwayat dan antrian booking sesuai role",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "Daftar riwayat dan antrian booking sesuai role"
+          }
+        },
+        {
+          "name": "[POST] /bookings - Membuat booking servis baru",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "Membuat booking servis baru"
+          }
+        },
+        {
+          "name": "[POST] /bookings/check-in - Check-in kendaraan di bengkel via QR scan (Staf)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/check-in",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "check-in"
+              ]
+            },
+            "description": "Check-in kendaraan di bengkel via QR scan (Staf)"
+          }
+        },
+        {
+          "name": "[GET] /bookings/{id} - Detail booking lengkap sesuai role yang mengakses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id"
+              ]
+            },
+            "description": "Detail booking lengkap sesuai role yang mengakses"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/cancel - Batalkan booking sebelum masuk pengerjaan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "cancel"
+              ]
+            },
+            "description": "Batalkan booking sebelum masuk pengerjaan"
+          }
+        },
+        {
+          "name": "[GET] /bookings/{id}/qr - Dapatkan payload signed QR code untuk check-in bengkel",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/qr",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "qr"
+              ]
+            },
+            "description": "Dapatkan payload signed QR code untuk check-in bengkel"
+          }
+        },
+        {
+          "name": "[GET] /bookings/{id}/logs - Riwayat audit transisi status booking",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "logs"
+              ]
+            },
+            "description": "Riwayat audit transisi status booking"
+          }
+        },
+        {
+          "name": "[GET] /bookings/{id}/queue-position - Posisi nomor antrian dan estimasi waktu tunggu",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/queue-position",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "queue-position"
+              ]
+            },
+            "description": "Posisi nomor antrian dan estimasi waktu tunggu"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/assign - Tugaskan mekanik penanggung jawab booking (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/assign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "assign"
+              ]
+            },
+            "description": "Tugaskan mekanik penanggung jawab booking (Admin)"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/start - Mulai pengerjaan servis fisik dan potong stok suku cadang",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "start"
+              ]
+            },
+            "description": "Mulai pengerjaan servis fisik dan potong stok suku cadang"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/ready - Tandai pengerjaan selesai dan kendaraan siap diambil",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/ready",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "ready"
+              ]
+            },
+            "description": "Tandai pengerjaan selesai dan kendaraan siap diambil"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/complete - Selesaikan booking (wajib lunas) dan picu reminder servis",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "complete"
+              ]
+            },
+            "description": "Selesaikan booking (wajib lunas) dan picu reminder servis"
+          }
+        },
+        {
+          "name": "[PATCH] /bookings/{id}/inspection - Simpan catatan inspeksi teknis awal/akhir mekanik",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/inspection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "inspection"
+              ]
+            },
+            "description": "Simpan catatan inspeksi teknis awal/akhir mekanik"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/items - Tambah usulan jasa/part tambahan saat servis berjalan (Staf)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "items"
+              ]
+            },
+            "description": "Tambah usulan jasa/part tambahan saat servis berjalan (Staf)"
+          }
+        },
+        {
+          "name": "[DELETE] /bookings/{id}/items/{itemId} - Tarik atau batalkan usulan item tambahan pending",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/items/:itemId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "items",
+                ":itemId"
+              ]
+            },
+            "description": "Tarik atau batalkan usulan item tambahan pending"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/approvals - Persetujuan / penolakan item tambahan oleh customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/approvals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "approvals"
+              ]
+            },
+            "description": "Persetujuan / penolakan item tambahan oleh customer"
+          }
+        },
+        {
+          "name": "[GET] /bookings/{id}/photos - Daftar foto inspeksi sebelum dan sesudah servis",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/photos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "photos"
+              ]
+            },
+            "description": "Daftar foto inspeksi sebelum dan sesudah servis"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/photos - Unggah foto bukti pekerjaan servis (BEFORE / AFTER)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/photos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "photos"
+              ]
+            },
+            "description": "Unggah foto bukti pekerjaan servis (BEFORE / AFTER)"
+          }
+        },
+        {
+          "name": "[DELETE] /bookings/{id}/photos/{photoId} - Hapus foto inspeksi booking",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/photos/:photoId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "photos",
+                ":photoId"
+              ]
+            },
+            "description": "Hapus foto inspeksi booking"
+          }
+        },
+        {
+          "name": "[GET] /bookings/{id}/payments - Riwayat seluruh tagihan dan pembayaran booking",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "payments"
+              ]
+            },
+            "description": "Riwayat seluruh tagihan dan pembayaran booking"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/payments/midtrans - Buat sesi transaksi pembayaran online Midtrans Snap",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/payments/midtrans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "payments",
+                "midtrans"
+              ]
+            },
+            "description": "Buat sesi transaksi pembayaran online Midtrans Snap"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/payments/cash - Penerimaan pembayaran tunai di kasir bengkel (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/payments/cash",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "payments",
+                "cash"
+              ]
+            },
+            "description": "Penerimaan pembayaran tunai di kasir bengkel (Admin)"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/tips - Beri uang tip sukarela untuk teknisi mekanik via Midtrans",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/tips",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "tips"
+              ]
+            },
+            "description": "Beri uang tip sukarela untuk teknisi mekanik via Midtrans"
+          }
+        },
+        {
+          "name": "[GET] /bookings/{id}/invoice.pdf - Unduh invoice resmi format PDF",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/invoice.pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "invoice.pdf"
+              ]
+            },
+            "description": "Unduh invoice resmi format PDF"
+          }
+        },
+        {
+          "name": "[POST] /bookings/{id}/review - Berikan ulasan dan rating kepuasan servis bengkel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/:id/review",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                ":id",
+                "review"
+              ]
+            },
+            "description": "Berikan ulasan dan rating kepuasan servis bengkel"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "[POST] /payments/midtrans/notification - Webhook HTTP notifikasi resmi dari server Midtrans",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/midtrans/notification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "midtrans",
+                "notification"
+              ]
+            },
+            "description": "Webhook HTTP notifikasi resmi dari server Midtrans"
+          }
+        },
+        {
+          "name": "[POST] /payments/{orderId}/sync - Sinkronisasi paksa status transaksi ke API Midtrans",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/:orderId/sync",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                ":orderId",
+                "sync"
+              ]
+            },
+            "description": "Sinkronisasi paksa status transaksi ke API Midtrans"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "[GET] /notifications - Daftar notifikasi aktivitas pengguna",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            },
+            "description": "Daftar notifikasi aktivitas pengguna"
+          }
+        },
+        {
+          "name": "[GET] /notifications/unread-count - Jumlah notifikasi yang belum dibaca",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "unread-count"
+              ]
+            },
+            "description": "Jumlah notifikasi yang belum dibaca"
+          }
+        },
+        {
+          "name": "[PATCH] /notifications/{id}/read - Tandai satu notifikasi sebagai telah dibaca",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/:id/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                ":id",
+                "read"
+              ]
+            },
+            "description": "Tandai satu notifikasi sebagai telah dibaca"
+          }
+        },
+        {
+          "name": "[POST] /notifications/read-all - Tandai seluruh notifikasi user sebagai telah dibaca",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/read-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "read-all"
+              ]
+            },
+            "description": "Tandai seluruh notifikasi user sebagai telah dibaca"
+          }
+        },
+        {
+          "name": "[POST] /notifications/devices - Daftarkan push token Expo dari perangkat mobile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "devices"
+              ]
+            },
+            "description": "Daftarkan push token Expo dari perangkat mobile"
+          }
+        },
+        {
+          "name": "[DELETE] /notifications/devices - Hapus push token Expo saat logout",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "devices"
+              ]
+            },
+            "description": "Hapus push token Expo saat logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assistant",
+      "item": [
+        {
+          "name": "[POST] /assistant/query - Tanya jawab AI asisten bengkel otomotif",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/assistant/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assistant",
+                "query"
+              ]
+            },
+            "description": "Tanya jawab AI asisten bengkel otomotif"
+          }
+        },
+        {
+          "name": "[GET] /assistant/menu - Daftar pertanyaan cepat / template menu asisten",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/assistant/menu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assistant",
+                "menu"
+              ]
+            },
+            "description": "Daftar pertanyaan cepat / template menu asisten"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff",
+      "item": [
+        {
+          "name": "[GET] /staff/queue - Antrian kerja bengkel aktif pada outlet cabang staf",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/staff/queue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "queue"
+              ]
+            },
+            "description": "Antrian kerja bengkel aktif pada outlet cabang staf"
+          }
+        },
+        {
+          "name": "[POST] /staff/queue/claim-next - Mekanik mengklaim antrian terdepan untuk dikerjakan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/staff/queue/claim-next",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "queue",
+                "claim-next"
+              ]
+            },
+            "description": "Mekanik mengklaim antrian terdepan untuk dikerjakan"
+          }
+        },
+        {
+          "name": "[GET] /staff/me/jobs - Riwayat seluruh pengerjaan servis mekanik bersangkutan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/staff/me/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "me",
+                "jobs"
+              ]
+            },
+            "description": "Riwayat seluruh pengerjaan servis mekanik bersangkutan"
+          }
+        },
+        {
+          "name": "[GET] /staff/me/reviews - Daftar ulasan customer terhadap pengerjaan mekanik ini",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/staff/me/reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "me",
+                "reviews"
+              ]
+            },
+            "description": "Daftar ulasan customer terhadap pengerjaan mekanik ini"
+          }
+        },
+        {
+          "name": "[GET] /staff/me/tips - Total dan riwayat penerimaan uang tip mekanik",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/staff/me/tips",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "me",
+                "tips"
+              ]
+            },
+            "description": "Total dan riwayat penerimaan uang tip mekanik"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Users",
+      "item": [
+        {
+          "name": "[GET] /admin/users - Daftar seluruh pengguna sistem (Customer, Staf, Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ]
+            },
+            "description": "Daftar seluruh pengguna sistem (Customer, Staf, Admin)"
+          }
+        },
+        {
+          "name": "[POST] /admin/users - Buat akun staf baru oleh Admin (Mekanik / Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ]
+            },
+            "description": "Buat akun staf baru oleh Admin (Mekanik / Admin)"
+          }
+        },
+        {
+          "name": "[GET] /admin/users/{id} - Detail pengguna sistem oleh Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                ":id"
+              ]
+            },
+            "description": "Detail pengguna sistem oleh Admin"
+          }
+        },
+        {
+          "name": "[PATCH] /admin/users/{id} - Perbarui profil atau role pengguna oleh Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                ":id"
+              ]
+            },
+            "description": "Perbarui profil atau role pengguna oleh Admin"
+          }
+        },
+        {
+          "name": "[PATCH] /admin/users/{id}/status - Aktivasi atau penonaktifan akun pengguna",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/:id/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                ":id",
+                "status"
+              ]
+            },
+            "description": "Aktivasi atau penonaktifan akun pengguna"
+          }
+        },
+        {
+          "name": "[DELETE] /admin/users/{id} - Hapus (soft delete) pengguna sistem",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                ":id"
+              ]
+            },
+            "description": "Hapus (soft delete) pengguna sistem"
+          }
+        },
+        {
+          "name": "[POST] /admin/users/{id}/restore - Pulihkan pengguna yang pernah di-soft-delete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/:id/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                ":id",
+                "restore"
+              ]
+            },
+            "description": "Pulihkan pengguna yang pernah di-soft-delete"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Outlets",
+      "item": [
+        {
+          "name": "[GET] /admin/outlets - Daftar outlet lengkap untuk manajemen Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/outlets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "outlets"
+              ]
+            },
+            "description": "Daftar outlet lengkap untuk manajemen Admin"
+          }
+        },
+        {
+          "name": "[POST] /admin/outlets - Tambah cabang outlet baru",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/outlets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "outlets"
+              ]
+            },
+            "description": "Tambah cabang outlet baru"
+          }
+        },
+        {
+          "name": "[PATCH] /admin/outlets/{id} - Perbarui informasi cabang outlet",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/outlets/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "outlets",
+                ":id"
+              ]
+            },
+            "description": "Perbarui informasi cabang outlet"
+          }
+        },
+        {
+          "name": "[DELETE] /admin/outlets/{id} - Soft delete outlet cabang",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/outlets/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "outlets",
+                ":id"
+              ]
+            },
+            "description": "Soft delete outlet cabang"
+          }
+        },
+        {
+          "name": "[POST] /admin/outlets/{id}/restore - Pulihkan outlet yang di-soft-delete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/outlets/:id/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "outlets",
+                ":id",
+                "restore"
+              ]
+            },
+            "description": "Pulihkan outlet yang di-soft-delete"
+          }
+        },
+        {
+          "name": "[POST] /admin/outlets/{id}/closures - Jadwalkan hari libur atau penutupan khusus outlet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/outlets/:id/closures",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "outlets",
+                ":id",
+                "closures"
+              ]
+            },
+            "description": "Jadwalkan hari libur atau penutupan khusus outlet"
+          }
+        },
+        {
+          "name": "[DELETE] /admin/outlets/{id}/closures/{closureId} - Batalkan hari libur penutupan outlet",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/outlets/:id/closures/:closureId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "outlets",
+                ":id",
+                "closures",
+                ":closureId"
+              ]
+            },
+            "description": "Batalkan hari libur penutupan outlet"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Catalog",
+      "item": [
+        {
+          "name": "[GET] /admin/categories - Daftar seluruh kategori jasa untuk Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "categories"
+              ]
+            },
+            "description": "Daftar seluruh kategori jasa untuk Admin"
+          }
+        },
+        {
+          "name": "[POST] /admin/categories - Buat kategori jasa servis baru",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "categories"
+              ]
+            },
+            "description": "Buat kategori jasa servis baru"
+          }
+        },
+        {
+          "name": "[PATCH] /admin/categories/{id} - Perbarui nama dan deskripsi kategori",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/categories/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "categories",
+                ":id"
+              ]
+            },
+            "description": "Perbarui nama dan deskripsi kategori"
+          }
+        },
+        {
+          "name": "[DELETE] /admin/categories/{id} - Soft delete kategori",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/categories/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "categories",
+                ":id"
+              ]
+            },
+            "description": "Soft delete kategori"
+          }
+        },
+        {
+          "name": "[POST] /admin/categories/{id}/restore - Pulihkan kategori terhapus",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/categories/:id/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "categories",
+                ":id",
+                "restore"
+              ]
+            },
+            "description": "Pulihkan kategori terhapus"
+          }
+        },
+        {
+          "name": "[GET] /admin/services - Daftar seluruh layanan servis untuk Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "services"
+              ]
+            },
+            "description": "Daftar seluruh layanan servis untuk Admin"
+          }
+        },
+        {
+          "name": "[POST] /admin/services - Tambah layanan servis baru ke katalog",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "services"
+              ]
+            },
+            "description": "Tambah layanan servis baru ke katalog"
+          }
+        },
+        {
+          "name": "[PATCH] /admin/services/{id} - Ubah harga atau spesifikasi layanan servis",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/services/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "services",
+                ":id"
+              ]
+            },
+            "description": "Ubah harga atau spesifikasi layanan servis"
+          }
+        },
+        {
+          "name": "[DELETE] /admin/services/{id} - Soft delete layanan servis",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/services/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "services",
+                ":id"
+              ]
+            },
+            "description": "Soft delete layanan servis"
+          }
+        },
+        {
+          "name": "[POST] /admin/services/{id}/restore - Pulihkan layanan servis",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/services/:id/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "services",
+                ":id",
+                "restore"
+              ]
+            },
+            "description": "Pulihkan layanan servis"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Spareparts",
+      "item": [
+        {
+          "name": "[GET] /admin/spareparts - Daftar inventori sparepart untuk manajemen gudang",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/spareparts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "spareparts"
+              ]
+            },
+            "description": "Daftar inventori sparepart untuk manajemen gudang"
+          }
+        },
+        {
+          "name": "[POST] /admin/spareparts - Tambah master data sparepart baru",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/spareparts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "spareparts"
+              ]
+            },
+            "description": "Tambah master data sparepart baru"
+          }
+        },
+        {
+          "name": "[PATCH] /admin/spareparts/{id} - Perbarui informasi dan harga suku cadang",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/spareparts/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "spareparts",
+                ":id"
+              ]
+            },
+            "description": "Perbarui informasi dan harga suku cadang"
+          }
+        },
+        {
+          "name": "[DELETE] /admin/spareparts/{id} - Soft delete sparepart",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/spareparts/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "spareparts",
+                ":id"
+              ]
+            },
+            "description": "Soft delete sparepart"
+          }
+        },
+        {
+          "name": "[POST] /admin/spareparts/{id}/restore - Pulihkan data sparepart",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/spareparts/:id/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "spareparts",
+                ":id",
+                "restore"
+              ]
+            },
+            "description": "Pulihkan data sparepart"
+          }
+        },
+        {
+          "name": "[POST] /admin/spareparts/{id}/adjust-stock - Penyesuaian stok sparepart (opname) dengan audit log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/spareparts/:id/adjust-stock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "spareparts",
+                ":id",
+                "adjust-stock"
+              ]
+            },
+            "description": "Penyesuaian stok sparepart (opname) dengan audit log"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Reviews",
+      "item": [
+        {
+          "name": "[PATCH] /admin/reviews/{id}/visibility - Moderasi visibilitas ulasan customer (sembunyikan / tampilkan)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/reviews/:id/visibility",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "reviews",
+                ":id",
+                "visibility"
+              ]
+            },
+            "description": "Moderasi visibilitas ulasan customer (sembunyikan / tampilkan)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Audit",
+      "item": [
+        {
+          "name": "[GET] /admin/audit-logs - Daftar riwayat audit log seluruh aksi admin dan sistem",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "audit-logs"
+              ]
+            },
+            "description": "Daftar riwayat audit log seluruh aksi admin dan sistem"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Analytics",
+      "item": [
+        {
+          "name": "[GET] /admin/dashboard - Metrik ringkasan dashboard real-time bengkel",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "dashboard"
+              ]
+            },
+            "description": "Metrik ringkasan dashboard real-time bengkel"
+          }
+        },
+        {
+          "name": "[GET] /admin/reports/summary - Laporan rekapitulasi performa bisnis bengkel",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/reports/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "reports",
+                "summary"
+              ]
+            },
+            "description": "Laporan rekapitulasi performa bisnis bengkel"
+          }
+        },
+        {
+          "name": "[GET] /admin/reports/export - Ekspor laporan ke format CSV / XLSX",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/reports/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "reports",
+                "export"
+              ]
+            },
+            "description": "Ekspor laporan ke format CSV / XLSX"
+          }
+        }
+      ]
+    }
+  ]
+}

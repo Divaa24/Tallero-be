@@ -1,0 +1,7 @@
+_legacy/
+node_modules/
+dist/
+storage/
+coverage/
+package-lock.json
+

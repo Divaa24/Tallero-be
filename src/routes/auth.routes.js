@@ -1,22 +1,101 @@
-const express = require("express");
-const router = express.Router();
-const validate = require("../middlewares/validate.middleware");
-const { verifyToken } = require("../middlewares/auth.middleware");
-const { 
-  registerSchema, 
-  verifyOtpSchema, 
-  loginSchema,
+import { Router } from "express";
+import authenticate from "../middlewares/authenticate.js";
+import { authorize, authorizePasswordChangeAllowed } from "../middlewares/authorize.js";
+import validate from "../middlewares/validate.js";
+import uploadSingleImage from "../middlewares/upload.js";
+import {
+  authEmailRateLimiter,
+  authIpRateLimiter,
+  loginRateLimiter,
+} from "../middlewares/rateLimit.js";
+import {
+  changePasswordSchema,
   forgotPasswordSchema,
-  resetPasswordSchema 
-} = require("../schemas/auth.schema");
-const authController = require("../controllers/auth.controller");
+  loginSchema,
+  logoutSchema,
+  refreshSchema,
+  registerSchema,
+  resendOtpSchema,
+  resetPasswordSchema,
+  updateMeSchema,
+  verifyOtpSchema,
+} from "../validations/auth.validation.js";
+import * as authController from "../controllers/auth.controller.js";
 
-router.post("/register", validate(registerSchema), authController.register);
-router.post("/verify-otp", validate(verifyOtpSchema), authController.verifyOtp);
-router.post("/login", validate(loginSchema), authController.login);
-router.post("/forgot-password", validate(forgotPasswordSchema), authController.forgotPassword);
-router.post("/reset-password", validate(resetPasswordSchema), authController.resetPassword);
+const authRouter = Router();
 
-router.get("/me", verifyToken, authController.getProfile);
+// Endpoint publik autentikasi (dilindungi rate limiter ketat + Zod .strict())
+authRouter.post(
+  "/register",
+  authIpRateLimiter,
+  validate(registerSchema),
+  authEmailRateLimiter,
+  authController.register
+);
+authRouter.post(
+  "/verify-otp",
+  authIpRateLimiter,
+  validate(verifyOtpSchema),
+  authEmailRateLimiter,
+  authController.verifyOtp
+);
+authRouter.post(
+  "/resend-otp",
+  authIpRateLimiter,
+  validate(resendOtpSchema),
+  authEmailRateLimiter,
+  authController.resendOtp
+);
+authRouter.post("/login", validate(loginSchema), loginRateLimiter, authController.login);
+authRouter.post("/refresh", authIpRateLimiter, validate(refreshSchema), authController.refresh);
+authRouter.post("/logout", validate(logoutSchema), authController.logout);
+authRouter.post(
+  "/forgot-password",
+  authIpRateLimiter,
+  validate(forgotPasswordSchema),
+  authEmailRateLimiter,
+  authController.forgotPassword
+);
+authRouter.post(
+  "/reset-password",
+  authIpRateLimiter,
+  validate(resetPasswordSchema),
+  authController.resetPassword
+);
 
-module.exports = router;
+// Endpoint terautentikasi untuk sesi & profil pengguna sendiri
+authRouter.post(
+  "/logout-all",
+  authenticate,
+  authorizePasswordChangeAllowed("CUSTOMER", "MECHANIC", "ADMIN"),
+  authController.logoutAll
+);
+authRouter.post(
+  "/change-password",
+  authenticate,
+  authorizePasswordChangeAllowed("CUSTOMER", "MECHANIC", "ADMIN"),
+  validate(changePasswordSchema),
+  authController.changePassword
+);
+authRouter.get(
+  "/me",
+  authenticate,
+  authorizePasswordChangeAllowed("CUSTOMER", "MECHANIC", "ADMIN"),
+  authController.getMe
+);
+authRouter.patch(
+  "/me",
+  authenticate,
+  authorize("CUSTOMER", "MECHANIC", "ADMIN"),
+  validate(updateMeSchema),
+  authController.updateMe
+);
+authRouter.post(
+  "/me/avatar",
+  authenticate,
+  authorize("CUSTOMER", "MECHANIC", "ADMIN"),
+  uploadSingleImage,
+  authController.uploadAvatar
+);
+
+export default authRouter;

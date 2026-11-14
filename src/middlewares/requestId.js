@@ -1,0 +1,15 @@
+import crypto from "node:crypto";
+
+/**
+ * Middleware untuk menyematkan Request ID unik pada setiap request
+ */
+export const requestId = (req, res, next) => {
+  const existingId = req.headers["x-request-id"];
+  const id = existingId && typeof existingId === "string" ? existingId : crypto.randomUUID();
+
+  req.id = id;
+  res.setHeader("x-request-id", id);
+  next();
+};
+
+export default requestId;
