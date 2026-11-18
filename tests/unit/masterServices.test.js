@@ -50,13 +50,16 @@ vi.mock("../../src/config/prisma.js", () => ({
   prisma: mockPrisma,
   withDeleted: mockWithDeleted,
   lockOutlet: vi.fn(),
+  lockCustomer: vi.fn(),
+  lockBooking: vi.fn(),
+  lockInvoices: vi.fn(),
 }));
 
 import * as mailService from "../../src/services/mail.service.js";
 import * as usersService from "../../src/services/users.service.js";
 import * as outletsService from "../../src/services/outlets.service.js";
 import * as catalogService from "../../src/services/catalog.service.js";
-import * as catalogCategories from "../../src/services/catalogCategories.js";
+import * as catalogCategories from "../../src/services/catalogCategories.service.js";
 import * as sparepartsService from "../../src/services/spareparts.service.js";
 import * as vehiclesService from "../../src/services/vehicles.service.js";
 import * as auditService from "../../src/services/audit.service.js";
@@ -568,5 +571,76 @@ describe("Fase 3 master data services & business guards", () => {
       data: { plateNumber: "B9999TLL", brand: "Honda", model: "Brio", type: "CAR", year: 2023 },
     });
     expect(reRegistered.plateNumber).toBe("B9999TLL");
+  });
+
+  it("supports marketing fields on services (badge, imageUrl, checklist) and managerName on outlets", async () => {
+    const adminActor = { id: 1, role: "ADMIN" };
+
+    // 1. Outlet dengan managerName
+    const outlet = await outletsService.createOutlet({
+      actor: adminActor,
+      data: {
+        name: "Cabang Utama Depok",
+        address: "Jl. Margonda Raya No. 120",
+        phone: "021-77889900",
+        managerName: "Budi Santoso",
+        latitude: -6.37,
+        longitude: 106.83,
+        openDays: [1, 2, 3, 4, 5, 6],
+        openTime: "08:00",
+        closeTime: "17:00",
+        slotMinutes: 60,
+        slotCapacity: 5,
+        timezone: "Asia/Jakarta",
+      },
+      ip: "127.0.0.1",
+    });
+    expect(outlet.managerName).toBe("Budi Santoso");
+
+    const publicOutlet = await outletsService.getPublicOutletById({ outletId: outlet.id });
+    expect(publicOutlet.managerName).toBe("Budi Santoso");
+
+    // 2. Service dengan badge, imageUrl, dan checklist
+    const cat = await catalogCategories.createCategory({
+      actor: adminActor,
+      data: { name: "Paket Perawatan" },
+      ip: "127.0.0.1",
+    });
+
+    const service = await catalogService.createService({
+      actor: adminActor,
+      data: {
+        categoryId: cat.id,
+        name: "Servis Berkala & Tune Up 3D",
+        description: "Paket lengkap servis berkala",
+        badge: "TERLARIS",
+        imageUrl: "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3",
+        checklist: ["Scan OBD2", "Bersih Ruang Bakar", "Ganti Busi"],
+        price: 550000,
+        estimatedMinutes: 90,
+      },
+      ip: "127.0.0.1",
+    });
+    expect(service.badge).toBe("TERLARIS");
+    expect(service.imageUrl).toBe("https://images.unsplash.com/photo-1486262715619-67b85e0b08d3");
+    expect(service.checklist).toEqual(["Scan OBD2", "Bersih Ruang Bakar", "Ganti Busi"]);
+
+    const publicSvc = await catalogService.getPublicServiceById({ serviceId: service.id });
+    expect(publicSvc.badge).toBe("TERLARIS");
+    expect(publicSvc.imageUrl).toBe("https://images.unsplash.com/photo-1486262715619-67b85e0b08d3");
+    expect(publicSvc.checklist).toEqual(["Scan OBD2", "Bersih Ruang Bakar", "Ganti Busi"]);
+
+    // Update marketing fields
+    const updatedSvc = await catalogService.updateService({
+      actor: adminActor,
+      serviceId: service.id,
+      data: {
+        badge: "PROMO",
+        price: 500000,
+      },
+      ip: "127.0.0.1",
+    });
+    expect(updatedSvc.badge).toBe("PROMO");
+    expect(updatedSvc.price).toBe(500000);
   });
 });

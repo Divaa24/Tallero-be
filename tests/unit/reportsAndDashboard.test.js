@@ -9,7 +9,7 @@ import { PassThrough } from "node:stream";
 import * as reportsService from "../../src/services/reports.service.js";
 import * as reportsController from "../../src/controllers/reports.controller.js";
 import * as staffController from "../../src/controllers/staff.controller.js";
-import { sanitizeCell } from "../../src/services/reportExporters.js";
+import { sanitizeCell } from "../../src/services/reportExporters.service.js";
 import {
   reportsSummaryQuerySchema,
   reportsExportQuerySchema,
@@ -35,6 +35,9 @@ vi.mock("../../src/config/prisma.js", () => {
     default: mockProxy,
     prisma: mockProxy,
     lockOutlet: async () => {},
+    lockCustomer: vi.fn(),
+    lockBooking: vi.fn(),
+    lockInvoices: vi.fn(),
   };
 });
 
@@ -377,21 +380,21 @@ describe("Fase 9: Dashboard, Laporan, Export, Formula Injection & Tip Mekanik", 
 
       const metrics = await reportsService.getDashboardMetrics({ outletId: 10 });
 
-      // Gross = 300.000 + 200.000 = 500.000
+      // Gross mencakup penerimaan sebelum refund: 300.000 + 200.000 + 50.000.
       // Refunds = 50.000
-      // Net = 500.000 - 50.000 = 450.000
+      // Net = 550.000 - 50.000 = 500.000
       // Tips = 25.000 (dilaporkan tersendiri)
-      expect(metrics.revenue.today.grossRevenue).toBe(500000);
+      expect(metrics.revenue.today.grossRevenue).toBe(550000);
       expect(metrics.revenue.today.refunds).toBe(50000);
-      expect(metrics.revenue.today.netRevenue).toBe(450000);
+      expect(metrics.revenue.today.netRevenue).toBe(500000);
       expect(metrics.revenue.today.tips).toBe(25000);
     });
 
     it("menghitung efisiensi pengerjaan (waktu tunggu dan durasi servis rata-rata)", async () => {
       const now = new Date();
       const checkInTime = new Date(now.getTime() - 90 * 60000); // 90 menit lalu
-      const startTime = new Date(now.getTime() - 60 * 60000);   // 60 menit lalu (tunggu = 30 mnt)
-      const readyTime = new Date(now.getTime() - 15 * 60000);   // 15 menit lalu (durasi servis = 45 mnt)
+      const startTime = new Date(now.getTime() - 60 * 60000); // 60 menit lalu (tunggu = 30 mnt)
+      const readyTime = new Date(now.getTime() - 15 * 60000); // 15 menit lalu (durasi servis = 45 mnt)
 
       mockStore._tables.booking.push({
         id: 103,
@@ -410,9 +413,36 @@ describe("Fase 9: Dashboard, Laporan, Export, Formula Injection & Tip Mekanik", 
 
     it("menampilkan sparepart dengan stok di bawah atau sama dengan LOW_STOCK_THRESHOLD", async () => {
       mockStore._tables.sparepart.push(
-        { id: 1, sku: "OLI-01", name: "Oli Mesin", stock: 3, unit: "botol", price: 85000, isActive: true, deletedAt: null },
-        { id: 2, sku: "BUSI-01", name: "Busi Iridium", stock: 5, unit: "pcs", price: 45000, isActive: true, deletedAt: null },
-        { id: 3, sku: "BAN-01", name: "Ban Tubeless", stock: 20, unit: "pcs", price: 250000, isActive: true, deletedAt: null }
+        {
+          id: 1,
+          sku: "OLI-01",
+          name: "Oli Mesin",
+          stock: 3,
+          unit: "botol",
+          price: 85000,
+          isActive: true,
+          deletedAt: null,
+        },
+        {
+          id: 2,
+          sku: "BUSI-01",
+          name: "Busi Iridium",
+          stock: 5,
+          unit: "pcs",
+          price: 45000,
+          isActive: true,
+          deletedAt: null,
+        },
+        {
+          id: 3,
+          sku: "BAN-01",
+          name: "Ban Tubeless",
+          stock: 20,
+          unit: "pcs",
+          price: 250000,
+          isActive: true,
+          deletedAt: null,
+        }
       );
 
       const metrics = await reportsService.getDashboardMetrics({ outletId: 10 });
@@ -609,7 +639,9 @@ describe("Fase 9: Dashboard, Laporan, Export, Formula Injection & Tip Mekanik", 
       await reportsController.exportData(req, res);
 
       expect(res.headers["content-type"]).toContain("text/csv");
-      expect(res.headers["content-disposition"]).toContain("report_stock_2026-11-01_2026-11-13.csv");
+      expect(res.headers["content-disposition"]).toContain(
+        "report_stock_2026-11-01_2026-11-13.csv"
+      );
 
       // Verifikasi UTF-8 BOM
       expect(res.bodyData.startsWith("\uFEFF")).toBe(true);
@@ -656,7 +688,9 @@ describe("Fase 9: Dashboard, Laporan, Export, Formula Injection & Tip Mekanik", 
       await reportsController.exportData(req, res);
 
       expect(res.headers["content-type"]).toContain("spreadsheetml.sheet");
-      expect(res.headers["content-disposition"]).toContain("report_stock_2026-11-01_2026-11-13.xlsx");
+      expect(res.headers["content-disposition"]).toContain(
+        "report_stock_2026-11-01_2026-11-13.xlsx"
+      );
 
       const exportAudit = mockStore._tables.auditLog.find((a) => a.entityId === "stock-xlsx");
       expect(exportAudit).toBeDefined();
@@ -680,7 +714,9 @@ describe("Fase 9: Dashboard, Laporan, Export, Formula Injection & Tip Mekanik", 
       await reportsController.exportData(req, res);
 
       expect(res.headers["content-type"]).toContain("application/pdf");
-      expect(res.headers["content-disposition"]).toContain("report_stock_2026-11-01_2026-11-13.pdf");
+      expect(res.headers["content-disposition"]).toContain(
+        "report_stock_2026-11-01_2026-11-13.pdf"
+      );
 
       const exportAudit = mockStore._tables.auditLog.find((a) => a.entityId === "stock-pdf");
       expect(exportAudit).toBeDefined();

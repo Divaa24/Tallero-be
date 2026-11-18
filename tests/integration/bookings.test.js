@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../src/app.js";
@@ -8,6 +9,7 @@ import { signAccessToken } from "../../src/utils/jwt.js";
 import { resetTestDb } from "../helpers/db.js";
 
 describe("Bookings API integration (/api/v1/bookings & /api/v1/outlets/:id/availability)", () => {
+  const testDate = DateTime.now().setZone("Asia/Jakarta").plus({ days: 2 }).toISODate();
   let customerUser;
   let customerToken;
   let otherCustomer;
@@ -18,12 +20,22 @@ describe("Bookings API integration (/api/v1/bookings & /api/v1/outlets/:id/avail
   let vehicleCar;
   let serviceCar;
 
+  let dbReady = false;
+
   beforeAll(async () => {
-    await prisma.$connect();
-    await resetTestDb();
+    try {
+      await prisma.$connect();
+      await prisma.$queryRaw`SELECT 1`;
+      dbReady = true;
+      await resetTestDb();
+    } catch (error) {
+      dbReady = false;
+      throw error;
+    }
   });
 
   beforeEach(async () => {
+    if (!dbReady) return;
     vi.restoreAllMocks();
     vi.spyOn(mailService, "sendMail").mockResolvedValue({ accepted: ["test"], driver: "console" });
 
@@ -37,7 +49,7 @@ describe("Bookings API integration (/api/v1/bookings & /api/v1/outlets/:id/avail
         address: "Jl. Kyai Maja No. 12",
         latitude: -6.24,
         longitude: 106.79,
-        openDays: [1, 2, 3, 4, 5, 6],
+        openDays: [1, 2, 3, 4, 5, 6, 7],
         openTime: "08:00",
         closeTime: "17:00",
         slotMinutes: 60,
@@ -117,13 +129,18 @@ describe("Bookings API integration (/api/v1/bookings & /api/v1/outlets/:id/avail
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    try {
+      if (dbReady) await resetTestDb();
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   it("checks availability, creates booking, retrieves QR, and cancels successfully", async () => {
+    if (!dbReady) return;
     // 1. Cek availability slot
     const availRes = await request(app)
-      .get(`/api/v1/outlets/${outlet.id}/availability?date=2026-11-20&serviceIds=${serviceCar.id}`)
+      .get(`/api/v1/outlets/${outlet.id}/availability?date=${testDate}&serviceIds=${serviceCar.id}`)
       .set("Authorization", `Bearer ${customerToken}`);
 
     expect(availRes.status).toBe(200);
@@ -137,12 +154,14 @@ describe("Bookings API integration (/api/v1/bookings & /api/v1/outlets/:id/avail
       .send({
         outletId: outlet.id,
         vehicleId: vehicleCar.id,
-        scheduledAt: "2026-11-20T10:00:00+07:00",
+        scheduledAt: `${testDate}T10:00:00+07:00`,
         items: [{ type: "SERVICE", serviceId: serviceCar.id, quantity: 1 }],
       });
 
     expect(createRes.status).toBe(201);
-    expect(createRes.body.data.code).toMatch(/^TLR-20261120-[A-Z0-9]{6}$/);
+    expect(createRes.body.data.code).toMatch(
+      new RegExp(`^TLR-${testDate.replaceAll("-", "")}-[A-Z0-9]{6}$`)
+    );
     expect(createRes.body.data.total).toBe(350000);
     const bookingId = createRes.body.data.id;
 

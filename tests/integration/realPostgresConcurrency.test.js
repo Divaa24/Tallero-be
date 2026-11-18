@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 // ==============================================================================
 // TALLERO AUTO — REAL POSTGRESQL CONCURRENCY & SECURITY AUDIT TEST
 // Memakai PostgreSQL Asli (TEST_DATABASE_URL), Tanpa Mock Prisma
@@ -14,17 +15,25 @@ import { NotFoundError, ForbiddenError } from "../../src/utils/errors.js";
 import { resetTestDb } from "../helpers/db.js";
 
 describe("Integration: Real PostgreSQL Concurrency & Security Proof", () => {
+  const testDate = DateTime.now().setZone("Asia/Jakarta").plus({ days: 2 }).toISODate();
   let outlet;
   let service;
   let category;
   let customerA;
   let customerB;
   let vehicleA;
+  let dbReady = false;
   const parallelCustomers = [];
 
   beforeAll(async () => {
-    await prisma.$queryRaw`SELECT 1`;
-    await resetTestDb();
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbReady = true;
+      await resetTestDb();
+    } catch (error) {
+      dbReady = false;
+      throw error;
+    }
 
     // 1. Setup Outlet dengan slotCapacity = 1 (Tepat 1 slot per jam)
     outlet = await prisma.outlet.create({
@@ -136,7 +145,7 @@ describe("Integration: Real PostgreSQL Concurrency & Security Proof", () => {
 
   afterAll(async () => {
     try {
-      await resetTestDb();
+      if (dbReady) await resetTestDb();
     } finally {
       await prisma.$disconnect();
       await pool.end();
@@ -147,6 +156,7 @@ describe("Integration: Real PostgreSQL Concurrency & Security Proof", () => {
   // UJI 1: STRESS TEST KONKURENSI (20 REQUEST PARALEL × 10 ITERASI)
   // ============================================================================
   it("mencegah overbooking pada 20 request paralel yang diulang 10× berturut-turut pada PostgreSQL asli", async () => {
+    if (!dbReady) return;
     // 10 slot waktu berbeda (jam 09:00 s.d 18:00) pada hari yang sama
     const testHours = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
     expect(testHours).toHaveLength(10);
@@ -156,7 +166,7 @@ describe("Integration: Real PostgreSQL Concurrency & Security Proof", () => {
 
     for (let iter = 0; iter < testHours.length; iter++) {
       const hour = testHours[iter];
-      const scheduledAtIso = `2026-11-16T${String(hour).padStart(2, "0")}:00:00+07:00`;
+      const scheduledAtIso = `${testDate}T${String(hour).padStart(2, "0")}:00:00+07:00`;
 
       // 20 request paralel bersaing memperebutkan 1 kapasitas slot yang sama
       const promises = parallelCustomers.map((pc) =>
@@ -215,13 +225,14 @@ describe("Integration: Real PostgreSQL Concurrency & Security Proof", () => {
   // UJI 2: PERTAHANAN IDOR BOOKING SCOPE DI POSTGRESQL ASLI
   // ============================================================================
   it("menegakkan pertahanan IDOR pada PostgreSQL asli: Customer B menerima 404 saat mengakses booking milik Customer A", async () => {
+    if (!dbReady) return;
     // Customer A membuat 1 booking
     const bookingA = await createBooking({
       actor: customerA,
       data: {
         outletId: outlet.id,
         vehicleId: vehicleA.id,
-        scheduledAt: "2026-11-17T10:00:00+07:00",
+        scheduledAt: `${testDate}T10:00:00+07:00`,
         items: [{ type: "SERVICE", serviceId: service.id, quantity: 1 }],
       },
     });
@@ -234,9 +245,9 @@ describe("Integration: Real PostgreSQL Concurrency & Security Proof", () => {
 
     // Customer B mencoba mengakses booking milik Customer A
     // AGENTS.md §4.10: Resource milik orang lain -> 404 NOT_FOUND (bukan 403)
-    await expect(
-      getBookingById({ actor: customerB, bookingId: bookingA.id })
-    ).rejects.toThrow(NotFoundError);
+    await expect(getBookingById({ actor: customerB, bookingId: bookingA.id })).rejects.toThrow(
+      NotFoundError
+    );
 
     // Bersihkan
     await prisma.bookingItem.deleteMany({});
@@ -248,6 +259,7 @@ describe("Integration: Real PostgreSQL Concurrency & Security Proof", () => {
   // UJI 3: VERIFIKASI TANDA TANGAN WEBHOOK MIDTRANS
   // ============================================================================
   it("menolak webhook Midtrans dengan signature palsu (403 ForbiddenError)", async () => {
+    if (!dbReady) return;
     // Siapkan booking & payment dummy
     const booking = await prisma.booking.create({
       data: {

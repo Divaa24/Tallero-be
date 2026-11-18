@@ -15,15 +15,17 @@ const io = initSocket(server);
 initScheduler();
 
 const PORT = env.PORT || 5000;
+const HOST = env.HOST || "0.0.0.0";
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   logger.info(
     {
+      host: HOST,
       port: PORT,
       env: env.NODE_ENV,
       pid: process.pid,
     },
-    `🚀 Server Tallero Auto aktif dan mendengarkan pada port ${PORT}`
+    `Server Tallero Auto aktif dan mendengarkan pada http://${HOST}:${PORT}`
   );
 });
 

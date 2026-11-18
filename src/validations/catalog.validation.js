@@ -78,6 +78,9 @@ export const createServiceSchema = {
       categoryId: z.coerce.number().int().positive(),
       name: z.string().trim().min(2, "Nama layanan minimal 2 karakter").max(100),
       description: z.string().trim().max(1000).nullable().optional(),
+      badge: z.string().trim().max(50).nullable().optional(),
+      imageUrl: z.string().trim().max(500).nullable().optional(),
+      checklist: z.array(z.string().trim().min(1).max(255)).max(20).nullable().optional(),
       price: z
         .number({ required_error: "Harga wajib diisi" })
         .int("Harga harus bilangan bulat Rupiah")
@@ -102,6 +105,9 @@ export const updateServiceSchema = {
       categoryId: z.coerce.number().int().positive().optional(),
       name: z.string().trim().min(2).max(100).optional(),
       description: z.string().trim().max(1000).nullable().optional(),
+      badge: z.string().trim().max(50).nullable().optional(),
+      imageUrl: z.string().trim().max(500).nullable().optional(),
+      checklist: z.array(z.string().trim().min(1).max(255)).max(20).nullable().optional(),
       price: z.number().int("Harga harus bilangan bulat Rupiah").positive().optional(),
       estimatedMinutes: z.number().int().positive().max(1440).optional(),
       vehicleType: z.enum(["CAR", "MOTORCYCLE"]).nullable().optional(),

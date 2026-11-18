@@ -3,6 +3,7 @@ import { sendSuccess, sendError } from "../utils/response.js";
 import prisma from "../config/prisma.js";
 import authRouter from "./auth.routes.js";
 import filesRouter from "./files.routes.js";
+import availabilityRouter from "./availability.routes.js";
 import adminUsersRouter from "./users.routes.js";
 import { adminOutletsRouter, publicOutletsRouter } from "./outlets.routes.js";
 import {
@@ -69,6 +70,7 @@ router.use("/auth", authRouter);
 router.use("/files", filesRouter);
 
 // Master data & operations (Fase 3 & Fase 4)
+router.use("/outlets", availabilityRouter);
 router.use("/outlets", publicOutletsRouter);
 router.use("/categories", publicCategoriesRouter);
 router.use("/services", publicServicesRouter);

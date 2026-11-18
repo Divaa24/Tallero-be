@@ -1,6 +1,28 @@
 # Tallero Auto — Backend API
 
-Backend RESTful API dan Realtime Service untuk bengkel **Tallero Auto**, melayani **Web Admin (React/Vite)** dan **Mobile App (Expo/React Native)**. Dibangun menggunakan Node.js LTS, Express 5 (JavaScript ESM), PostgreSQL 16, Prisma 7, Zod, Socket.IO, dan Midtrans Snap.
+Backend RESTful API dan Realtime Service untuk bengkel **Tallero Auto**, melayani **Web Admin (React/Next.js)** dan **Mobile App (Expo/React Native)**. Dibangun menggunakan Node.js LTS, Express 5 (JavaScript ESM), PostgreSQL 16, Prisma 7, Zod, Socket.IO, dan Midtrans Snap.
+
+Hasil perbaikan, penggunaan database lokal, pengujian transaksi, dan batasan integrasi eksternal terbaru: [Verifikasi 18 November 2026](docs/VERIFICATION_2026-11-18.md). Frontend lokal berjalan di `http://localhost:3000`; backend di port 5000. Gunakan `TEST_DATABASE_URL` yang terpisah untuk automated test. Initial migration hanya diterapkan pada database baru; database lama tidak direset.
+
+---
+
+## 📌 Panduan Integrasi Khusus Tim Frontend & Mobile
+
+Bagi tim pengembang Frontend Web dan Mobile Apps, seluruh dokumen kontrak teknis resmi telah disusun secara komprehensif di folder `docs/`.
+
+### Urutan Membaca Dokumen (Reading Order):
+
+1. [docs/ENDPOINTS.md](docs/ENDPOINTS.md) — Tabel ringkas seluruh **106 endpoint**, role yang berhak, dan tag Klien (`WEB` / `MOBILE` / `KEDUANYA`).
+2. [docs/DATA_MODELS.md](docs/DATA_MODELS.md) — Format model data (User, Booking, Outlet, dll.), seluruh enum, format integer Rupiah, dan tanggal UTC ISO.
+3. [docs/AUTH_FLOW.md](docs/AUTH_FLOW.md) — Alur login, cookie HTTP-only (Web) vs SecureStore (Mobile), OTP, rotasi token, dan single-flight interceptor.
+4. [docs/BUSINESS_RULES.md](docs/BUSINESS_RULES.md) — State machine pengerjaan bengkel (Mermaid diagram), aturan antrean, dan seluruh konstanta `rules.js`.
+5. [docs/API.md](docs/API.md) — Rujukan teknis lengkap per endpoint (request body, response JSON nyata, daftar error, dan penanganan UI).
+6. [docs/PAYMENTS.md](docs/PAYMENTS.md) — Alur pembayaran online Midtrans Snap, kasir tunai, uang tip mekanik, faktur PDF, dan sandbox setup.
+7. [docs/REALTIME.md](docs/REALTIME.md) — Integrasi WebSocket Socket.IO, autentikasi handshake, isolasi room, katalog event, dan strategi refetch.
+8. [docs/FILES.md](docs/FILES.md) — Tata cara upload foto/avatar, penanganan Signed URL kedaluwarsa, dan unduhan berkas blob.
+9. [docs/SCREEN_ENDPOINT_MAP.md](docs/SCREEN_ENDPOINT_MAP.md) — Usulan pemetaan layar Web Admin & Mobile App terhadap endpoint pendukungnya.
+10. [docs/FE_MATCHING_TEMPLATE.md](docs/FE_MATCHING_TEMPLATE.md) — Template verifikasi pencocokan field & enum yang wajib diisi selama proses slicing UI.
+11. [docs/CHANGELOG_BACKEND.md](docs/CHANGELOG_BACKEND.md) — Catatan riwayat fitur v1.0.0 dan batasan teknis sistem.
 
 ---
 
@@ -16,8 +38,8 @@ Backend RESTful API dan Realtime Service untuk bengkel **Tallero Auto**, melayan
 
 Sesuai aturan `AGENTS.md §1`, proyek ini menggunakan **dua database terpisah** agar automated test tidak menyentuh data development:
 
-1. `tallero_dev` (atau `tallero_db`) — untuk development runtime (`DATABASE_URL`)
-2. `tallero_test` (atau `tallero_test_db`) — untuk automated testing (`TEST_DATABASE_URL`)
+1. `tallero_dev` — untuk development runtime (`DATABASE_URL`)
+2. `tallero_test` — untuk automated testing (`TEST_DATABASE_URL`)
 
 ### Menggunakan PostgreSQL CLI (`psql`)
 
@@ -94,19 +116,19 @@ CREATE DATABASE tallero_test;
 
 ## 4. Migrasi Database & Seeding Data Demo
 
-Jalankan migrasi skema database dan populasi data awal:
+Jalankan migrasi skema database dan populasi data awal secara otomatis:
 
 ```bash
 # 1. Jalankan migrasi Prisma ke database development
 npx prisma migrate dev
 
-# 2. Jalankan seed data master dan demo transaksi
+# 2. Jalankan seed data master dan transaksi demo lengkap
 npm run db:seed
 ```
 
 ---
 
-## 5. Menjalankan Server & Dokumentasi API
+## 5. Menjalankan Server & Dokumentasi API Interaktif
 
 ### Menjalankan Server Development
 
@@ -114,88 +136,61 @@ npm run db:seed
 npm run dev
 ```
 
-Server berjalan pada `http://localhost:5000`.
+Server berjalan pada port `http://localhost:5000`:
 
 - **Liveness probe**: `GET http://localhost:5000/api/v1/health`
 - **Readiness probe**: `GET http://localhost:5000/api/v1/ready`
-- **Interactive Swagger UI**: Buka browser pada `http://localhost:5000/docs` (tersedia pada non-production).
+- **Interactive Swagger UI**: Buka peramban pada **`http://localhost:5000/docs`** (tersedia pada mode non-production).
 
 ### Ekspor OpenAPI Spec & Postman Collection
 
-Spesifikasi OpenAPI dan koleksi Postman yang dilengkapi skrip auto-inject JWT token dapat diperbarui kapan saja melalui:
+Spesifikasi OpenAPI dan koleksi Postman yang dilengkapi skrip otomatis injeksi token Bearer dapat diperbarui kapan saja melalui:
 
 ```bash
 node scripts/generate-openapi.js
 ```
 
-File hasil generasi:
-1. `docs/openapi.json` — Spesifikasi OpenAPI 3.0.3 lengkap.
-2. `docs/tallero-auto.postman_collection.json` — Koleksi Postman dengan pre-request script dan auto-token test script.
-3. `docs/tallero-auto.postman_environment.json` — Konfigurasi environment lokal Postman.
+File hasil ekspor yang siap digunakan:
+
+1. `docs/openapi.json` — Spesifikasi OpenAPI 3.0.3 lengkap (106 endpoint).
+2. `docs/tallero-auto.postman_collection.json` — Koleksi Postman siap impor dengan alur autentikasi otomatis.
+3. `docs/tallero-auto.postman_environment.json` — Variabel environment Postman lokal.
 
 ---
 
-## 6. Daftar Akun Demo Resmi
+## 6. Daftar Akun Demo Resmi untuk Pengujian FE
 
-Seluruh password akun demo di-hash menggunakan `bcrypt` (cost 12) dan bersifat deterministik untuk mempermudah demonstrasi tim Frontend/Mobile:
+Seluruh password akun demo di-hash menggunakan `bcrypt` (cost 12) dan bersifat deterministik untuk mempermudah login tim Frontend & Mobile:
 
-| Role | Nama | Email | Password | Keterangan & Akses Fitur |
-| :--- | :--- | :--- | :--- | :--- |
-| **ADMIN** | Admin Pusat | `admin@tallero.test` | `AdminTallero123!` | Akses Dashboard Admin, Kasir Tunai, Master Data, Ekspor Laporan |
-| **MECHANIC** | Bambang Prakoso | `bambang.mekanik@tallero.test` | `MekanikTallero123!` | Mekanik Cabang Barat (Antrian, Start, Tambah Item, Foto) |
-| **MECHANIC** | Hendra Wijaya | `hendra.mekanik@tallero.test` | `MekanikTallero123!` | Mekanik Cabang Timur (Antrian, Start, Tambah Item, Foto) |
-| **CUSTOMER** | Ahmad Fadillah | `ahmad.customer@tallero.test` | `CustomerTallero123!` | Customer (Booking PENDING siap Scan QR, Kendaraan Avanza Veloz) |
-| **CUSTOMER** | Budi Santoso | `budi.customer@tallero.test` | `CustomerTallero123!` | Customer (Booking COMPLETED, Lunas Midtrans, Ulasan Bintang 5, HR-V) |
-| **CUSTOMER** | Dewi Anggraini | `dewi.customer@tallero.test` | `CustomerTallero123!` | Customer (Booking WAITING_APPROVAL, menunggu persetujuan item tambahan) |
+| Role         | Nama            | Email                          | Password              | Cabang / Akses Fitur                                            |
+| :----------- | :-------------- | :----------------------------- | :-------------------- | :-------------------------------------------------------------- |
+| **ADMIN**    | Admin Pusat     | `admin@tallero.test`           | `AdminTallero123!`    | Akses Dashboard Admin, Kasir Tunai, Master Data, Ekspor Laporan |
+| **MECHANIC** | Bambang Prakoso | `bambang.mekanik@tallero.test` | `MekanikTallero123!`  | Mekanik Cabang Barat (Antrian Pit, Start, Tambah Item, Foto)    |
+| **MECHANIC** | Hendra Wijaya   | `hendra.mekanik@tallero.test`  | `MekanikTallero123!`  | Mekanik Cabang Timur (Antrian Pit, Start, Tambah Item, Foto)    |
+| **CUSTOMER** | Ahmad Fadillah  | `ahmad.customer@tallero.test`  | `CustomerTallero123!` | Booking PENDING siap Scan QR, Kendaraan Avanza Veloz            |
+| **CUSTOMER** | Budi Santoso    | `budi.customer@tallero.test`   | `CustomerTallero123!` | Booking COMPLETED, Lunas Midtrans, Ulasan Bintang 5             |
+| **CUSTOMER** | Dewi Anggraini  | `dewi.customer@tallero.test`   | `CustomerTallero123!` | Booking WAITING_APPROVAL (menunggu approval item tambahan)      |
 
 ---
 
 ## 7. Setup Pembayaran Midtrans Sandbox & Webhook Lokal
 
-Aplikasi menggunakan integrasi langsung HTTP Midtrans Snap API (tanpa SDK lama) dengan otorisasi Basic Auth (`Base64(MIDTRANS_SERVER_KEY + ":")`).
+Aplikasi menggunakan integrasi langsung HTTP Midtrans Snap API (tanpa SDK lama) dengan otorisasi Basic Auth.
 
 1. Daftar akun sandbox di [Midtrans Sandbox Portal](https://dashboard.sandbox.midtrans.com/).
-2. Buka menu **Settings → Access Keys** dan salin **Server Key** serta **Client Key** ke `.env`.
-3. Untuk menguji webhook notifikasi pembayaran di localhost, gunakan tunnel tools seperti `ngrok` atau `localtunnel`:
+2. Buka menu **Settings → Access Keys** dan salin **Server Key** serta **Client Key** ke file `.env`.
+3. Untuk menguji webhook notifikasi pembayaran di localhost, gunakan tunnel tools seperti `ngrok`:
    ```bash
    npx ngrok http 5000
    ```
 4. Buka **Settings → Configuration** di Midtrans Sandbox:
    - **Payment Notification URL**: `https://<subdomain-ngrok>.ngrok-free.app/api/v1/payments/midtrans/notification`
    - Klik **Update**.
-5. Setiap transaksi settlement Midtrans akan memverifikasi `signature_key` SHA-512 dan konfirmasi ulang status resmi secara aman.
+5. Klien Web/Mobile dapat menggunakan kartu kredit dan virtual account simulator resmi Midtrans untuk simulasi transaksi.
 
 ---
 
-## 8. Setup Gmail OAuth2 (`EMAIL_DRIVER=gmail`)
-
-Pada environment `development` dan `test`, `EMAIL_DRIVER=console` mencetak preview email ke log `pino`. Pada `production`, aplikasi **wajib** memakai `EMAIL_DRIVER=gmail` dengan Nodemailer OAuth2:
-
-1. Buka **Google Cloud Console** (`https://console.cloud.google.com/`), buat atau pilih project, lalu aktifkan **Gmail API**.
-2. Buka menu **APIs & Services → OAuth consent screen**:
-   - Pilih tipe user (**External** untuk akun Gmail biasa).
-   - Isi nama aplikasi, email support, dan tambahkan akun pengirim ke daftar _Test users_.
-   - **PENTING:** Consent screen yang berstatus **Testing** menyebabkan `refresh_token` OAuth2 **kedaluwarsa setiap 7 hari**. Sebelum dipakai jangka panjang/production, klik **Publish App** agar status berubah menjadi **In production**.
-3. Buka **APIs & Services → Credentials → Create Credentials → OAuth client ID**:
-   - Application type: **Web application**.
-   - Tambahkan Authorized redirect URI: `https://developers.google.com/oauthplayground`.
-   - Salin **Client ID** (`GMAIL_CLIENT_ID`) dan **Client Secret** (`GMAIL_CLIENT_SECRET`).
-4. Buka **Google OAuth 2.0 Playground** (`https://developers.google.com/oauthplayground`):
-   - Klik ikon gear (_Settings_) di kanan atas → centang **Use your own OAuth credentials** → masukkan Client ID & Client Secret Anda.
-   - Pada langkah **Select & authorize APIs**, masukkan scope `https://mail.google.com/` → klik **Authorize APIs** dan login memakai akun Gmail pengirim (`GMAIL_USER`).
-   - Klik **Exchange authorization code for tokens** → salin **Refresh token** (`GMAIL_REFRESH_TOKEN`).
-5. Perbarui `.env`:
-   ```env
-   EMAIL_DRIVER=gmail
-   GMAIL_USER=bengkel@gmail.com
-   GMAIL_CLIENT_ID=...
-   GMAIL_CLIENT_SECRET=...
-   GMAIL_REFRESH_TOKEN=...
-   ```
-
----
-
-## 9. Menjalankan Tes & Pemeriksaan Kualitas
+## 8. Menjalankan Tes & Pemeriksaan Kualitas Otomatis
 
 Proyek ini dilengkapi dengan suite pengujian unit dan integrasi otomatis yang ketat:
 
@@ -203,17 +198,16 @@ Proyek ini dilengkapi dengan suite pengujian unit dan integrasi otomatis yang ke
 # 1. Jalankan linter dan validator struktur folder
 npm run lint
 
-# 2. Jalankan validasi skema Prisma
+# 2. Jalankan pemeriksaan struktur folder dan penamaan service
+npm run check:structure
+
+# 3. Jalankan validasi skema Prisma
 npx prisma validate
 
-# 3. Jalankan automated test vitest
+# 4. Jalankan automated test vitest
 npm test
 ```
 
----
+## Log development
 
-## 10. Referensi Dokumentasi Tambahan
-
-- [docs/FLOW.md](docs/FLOW.md) — Diagram alur visual Mermaid: Alur Customer, Alur Staf Bengkel, State Machine Booking, Alur Pembayaran Midtrans, Row Locking Antrian, dan Rotasi Token.
-- [docs/API.md](docs/API.md) — Ringkasan kontrak API, format envelope respons, daftar kode error, event realtime Socket.IO, format QR Code, dan panduan penggunaan signed URL.
-- [docs/DECISIONS.md](docs/DECISIONS.md) — Daftar catatan keputusan arsitektur (Architecture Decision Records / ADR-001 s/d ADR-018).
+Secara default `LOG_LEVEL=info` dan `LOG_SQL_QUERIES=false`. Request dicatat sebagai ID, method, path tanpa query string, status HTTP dan waktu respons. Header, cookie dan body tidak dicetak pada log HTTP. Peringatan/error tetap terlihat. Untuk menelusuri SQL di development, gunakan `LOG_LEVEL=debug` bersama `LOG_SQL_QUERIES=true`, lalu restart backend; parameter query tidak dicetak. Log SQL tidak diaktifkan untuk production.

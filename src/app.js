@@ -47,6 +47,7 @@ const corsOptions = {
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id", "X-Client"],
+  exposedHeaders: ["Content-Disposition"],
   maxAge: 86400,
 };
 app.use(cors(corsOptions));
@@ -57,6 +58,10 @@ app.use(
     logger,
     genReqId: (req) => req.id,
     autoLogging: env.NODE_ENV !== "test",
+    serializers: {
+      req: (req) => ({ id: req.id, method: req.method, url: req.url?.split("?")[0] }),
+      res: (res) => ({ statusCode: res.statusCode }),
+    },
     customLogLevel: (req, res, err) => {
       if (res.statusCode >= 500 || err) return "error";
       if (res.statusCode >= 400) return "warn";

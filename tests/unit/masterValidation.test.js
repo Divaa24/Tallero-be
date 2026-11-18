@@ -64,6 +64,21 @@ describe("Fase 3 validation schemas", () => {
       createOutletSchema.body.safeParse({
         name: "Tallero Sudirman",
         address: "Jl. Jenderal Sudirman No. 10",
+        managerName: "Budi Santoso",
+        latitude: -6.2,
+        longitude: 106.8,
+        openDays: [1, 2, 3],
+        openTime: "08:00",
+        closeTime: "17:00",
+        slotMinutes: 60,
+        slotCapacity: 3,
+      }).success
+    ).toBe(true);
+
+    expect(
+      createOutletSchema.body.safeParse({
+        name: "Tallero Sudirman",
+        address: "Jl. Jenderal Sudirman No. 10",
         latitude: -6.2,
         longitude: 106.8,
         openDays: [1, 1, 2],
@@ -84,7 +99,19 @@ describe("Fase 3 validation schemas", () => {
     ).toBe(true);
   });
 
-  it("enforces positive integer price on services and adjust-stock rules on spareparts", () => {
+  it("enforces positive integer price on services and accepts marketing fields (badge, imageUrl, checklist)", () => {
+    expect(
+      createServiceSchema.body.safeParse({
+        categoryId: 1,
+        name: "Ganti Oli",
+        badge: "TERLARIS",
+        imageUrl: "https://images.unsplash.com/photo-1",
+        checklist: ["Ganti oli mesin 4L", "Cek filter"],
+        price: 350000,
+        estimatedMinutes: 30,
+      }).success
+    ).toBe(true);
+
     expect(
       createServiceSchema.body.safeParse({
         categoryId: 1,

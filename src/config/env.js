@@ -6,8 +6,16 @@ dotenv.config();
 
 const envSchema = z
   .object({
+    HOST: z.string().default("0.0.0.0"),
     PORT: z.coerce.number().int().positive().default(5000),
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    LOG_LEVEL: z
+      .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+      .default("info"),
+    LOG_SQL_QUERIES: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
 
     DATABASE_URL: z.string().min(1, "DATABASE_URL wajib diisi"),
     TEST_DATABASE_URL: z.string().optional(),
@@ -26,10 +34,19 @@ const envSchema = z
           .filter(Boolean)
       ),
 
+    // Konfigurasi Cookie Refresh Token Web (AGENTS.md §4.6)
+    COOKIE_SAME_SITE: z.enum(["strict", "lax", "none"]).default("lax"),
+    COOKIE_DOMAIN: z.string().optional(),
+    COOKIE_PATH: z.string().default("/api/v1/auth"),
+    COOKIE_SECURE: z
+      .union([z.boolean(), z.string()])
+      .transform((val) => val === true || val === "true")
+      .optional(),
+
     WEB_URL: z
       .string()
       .url("WEB_URL harus berupa URL valid (mis. http://localhost:5173)")
-      .default("http://localhost:5173"),
+      .default("http://localhost:3000"),
     MOBILE_DEEP_LINK: z.string().min(1, "MOBILE_DEEP_LINK wajib diisi").default("tallero://"),
 
     EMAIL_DRIVER: z.enum(["console", "gmail"]).default("console"),
@@ -75,6 +92,35 @@ const envSchema = z
         message:
           "TEST_DATABASE_URL wajib diisi ketika NODE_ENV='test' agar tes tidak menyentuh DB dev",
       });
+    }
+
+    if (data.TEST_DATABASE_URL && data.DATABASE_URL) {
+      try {
+        const dev = new URL(data.DATABASE_URL);
+        const test = new URL(data.TEST_DATABASE_URL);
+        const host = (url) =>
+          ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)
+            ? "loopback"
+            : url.hostname.toLowerCase();
+        if (
+          host(dev) === host(test) &&
+          (dev.port || "5432") === (test.port || "5432") &&
+          decodeURIComponent(dev.pathname) === decodeURIComponent(test.pathname)
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["TEST_DATABASE_URL"],
+            message:
+              "Database test wajib berbeda dari database development (termasuk schema berbeda)",
+          });
+        }
+      } catch {
+        ctx.addIssue({
+          code: "custom",
+          path: ["TEST_DATABASE_URL"],
+          message: "URL database tidak valid",
+        });
+      }
     }
 
     if (data.NODE_ENV === "production" && data.EMAIL_DRIVER === "console") {

@@ -1,5 +1,5 @@
 import { Server } from "socket.io";
-import jwt from "jsonwebtoken";
+import { verifyAccessToken } from "../utils/jwt.js";
 import env from "./env.js";
 import logger from "./logger.js";
 import prisma from "./prisma.js";
@@ -32,7 +32,7 @@ export const socketAuthMiddleware = async (socket, next) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] });
+      decoded = verifyAccessToken(token);
     } catch (jwtErr) {
       const err = new Error("Token autentikasi tidak valid atau telah kedaluwarsa");
       err.data = { code: "INVALID_TOKEN", details: jwtErr.message };
@@ -133,8 +133,17 @@ export const handleSocketConnection = (socket) => {
 export const initSocket = (httpServer) => {
   const io = new Server(httpServer, {
     cors: {
-      origin: env.CORS_ORIGINS,
+      origin: (origin, callback) => {
+        // Izinkan request tanpa origin (mobile native) sesuai AGENTS.md §4.20
+        if (!origin) return callback(null, true);
+        if (env.CORS_ORIGINS.includes(origin)) return callback(null, true);
+        return callback(
+          new Error(`Origin ${origin} tidak diizinkan oleh kebijakan CORS Socket.IO`),
+          false
+        );
+      },
       credentials: true,
+      allowedHeaders: ["Content-Type", "Authorization", "X-Client", "X-Request-Id"],
     },
     serveClient: false,
   });

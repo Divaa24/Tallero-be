@@ -7,7 +7,7 @@
 import crypto from "node:crypto";
 import { DateTime } from "luxon";
 import PDFDocument from "pdfkit";
-import prisma from "../config/prisma.js";
+import prisma, { lockBooking, lockInvoices } from "../config/prisma.js";
 import logger from "../config/logger.js";
 import RULES from "../config/rules.js";
 import { emitRealtimeEvent } from "./realtime.service.js";
@@ -50,6 +50,7 @@ export const publicPaymentSelect = {
  * @returns {Promise<string>}
  */
 export const generateInvoiceNumber = async (tx) => {
+  await lockInvoices(tx);
   const yyyymm = DateTime.now().setZone(RULES.TIMEZONE).toFormat("yyyyMM");
   const prefix = `INV-${yyyymm}-`;
 
@@ -124,37 +125,20 @@ export const createMidtransInvoicePayment = async ({ actor, bookingId }) => {
 
   // Hitung total dari snapshot APPROVED
   const calculatedTotal = booking.items.reduce((sum, item) => sum + item.subtotal, 0);
-  const finalAmount = calculatedTotal > 0 ? calculatedTotal : booking.total;
+  const finalAmount = calculatedTotal;
 
-  if (finalAmount <= 0) {
+  if (finalAmount <= 0 || !Number.isSafeInteger(finalAmount) || finalAmount > 2147483647) {
     throw new BadRequestError(
       "Total tagihan servis tidak valid (nol atau negatif)",
       "INVALID_TOTAL_AMOUNT"
     );
   }
 
-  // Batalkan percobaan PENDING sebelumnya pada booking ini (best-effort)
-  const priorPendingPayments = await prisma.payment.findMany({
-    where: {
-      bookingId: booking.id,
-      type: "INVOICE",
-      status: "PENDING",
-    },
-  });
-
-  for (const prior of priorPendingPayments) {
-    await midtransService.cancel(prior.orderId);
-    await prisma.payment.update({
-      where: { id: prior.id },
-      data: { status: "CANCELLED" },
-    });
-  }
-
   // Susun nomor order yang unik dan <= 50 karakter
   const invoiceAttemptCount = await prisma.payment.count({
     where: { bookingId: booking.id, type: "INVOICE" },
   });
-  const randomSuffix = crypto.randomInt(1000, 9999);
+  const randomSuffix = crypto.randomBytes(6).toString("hex");
   const orderId = `${booking.code}-INV-${invoiceAttemptCount + 1}-${randomSuffix}`;
 
   // Susun item_details persis sama dengan total (syarat Midtrans gross_amount === sum(items))
@@ -186,21 +170,48 @@ export const createMidtransInvoicePayment = async ({ actor, bookingId }) => {
     expiryDurationMinutes: RULES.PAYMENT_EXPIRY_MIN,
   });
 
-  // Simpan record Payment baru
-  const payment = await prisma.payment.create({
-    data: {
-      bookingId: booking.id,
-      type: "INVOICE",
-      method: "MIDTRANS",
-      orderId,
-      amount: finalAmount,
-      status: "PENDING",
-      snapToken: snapResult.token,
-      redirectUrl: snapResult.redirectUrl,
-      expiresAt,
-    },
-    select: publicPaymentSelect,
-  });
+  // Persist the attempt under the same booking lock used by cash and webhooks.
+  let saved;
+  try {
+    saved = await prisma.$transaction(async (tx) => {
+      await lockBooking(tx, booking.id);
+      const current = await tx.booking.findUnique({ where: { id: booking.id } });
+      if (current.paymentStatus === "PAID" || current.status !== "READY_FOR_PICKUP") {
+        throw new ConflictError(
+          "Booking sudah dibayar atau tidak dapat ditagih",
+          "BOOKING_ALREADY_PAID"
+        );
+      }
+      const priorPending = await tx.payment.findMany({
+        where: { bookingId: booking.id, type: "INVOICE", status: "PENDING" },
+        select: { orderId: true },
+      });
+      await tx.payment.updateMany({
+        where: { bookingId: booking.id, type: "INVOICE", status: "PENDING" },
+        data: { status: "CANCELLED" },
+      });
+      const payment = await tx.payment.create({
+        data: {
+          bookingId: booking.id,
+          type: "INVOICE",
+          method: "MIDTRANS",
+          orderId,
+          amount: finalAmount,
+          status: "PENDING",
+          snapToken: snapResult.token,
+          redirectUrl: snapResult.redirectUrl,
+          expiresAt,
+        },
+        select: publicPaymentSelect,
+      });
+      return { payment, priorPending };
+    });
+  } catch (error) {
+    await midtransService.cancel(orderId);
+    throw error;
+  }
+  const { payment, priorPending } = saved;
+  await Promise.all(priorPending.map((p) => midtransService.cancel(p.orderId)));
 
   return {
     snapToken: snapResult.token,
@@ -270,7 +281,7 @@ export const createTipPayment = async ({ actor, bookingId, amount }) => {
   const tipAttemptCount = await prisma.payment.count({
     where: { bookingId: booking.id, type: "TIP" },
   });
-  const randomSuffix = crypto.randomInt(1000, 9999);
+  const randomSuffix = crypto.randomBytes(6).toString("hex");
   const orderId = `${booking.code}-TIP-${tipAttemptCount + 1}-${randomSuffix}`;
 
   const itemDetails = [
@@ -330,126 +341,90 @@ export const createTipPayment = async ({ actor, bookingId, amount }) => {
  */
 export const payCash = async ({ actor, bookingId, ip }) => {
   if (actor.role !== "ADMIN") {
-    throw new ForbiddenError(
-      "Hanya admin atau kasir yang dapat mencatat pembayaran tunai",
-      "FORBIDDEN"
-    );
+    throw new ForbiddenError("Hanya admin yang dapat mencatat pembayaran tunai", "FORBIDDEN");
   }
-
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
-    include: {
-      items: {
-        where: { approvalStatus: "APPROVED" },
-        select: { subtotal: true },
-      },
-    },
-  });
-
-  if (!booking) {
-    throw new NotFoundError("Booking tidak ditemukan", "BOOKING_NOT_FOUND");
-  }
-
-  if (booking.status !== "READY_FOR_PICKUP") {
-    throw new ConflictError(
-      `Pembayaran kasir hanya dapat diproses saat kendaraan siap diambil (READY_FOR_PICKUP). Status saat ini: ${booking.status}`,
-      "INVALID_BOOKING_STATUS"
-    );
-  }
-
-  if (booking.paymentStatus === "PAID") {
-    throw new ConflictError("Booking ini telah lunas dibayar (PAID)", "BOOKING_ALREADY_PAID");
-  }
-
-  // Hitung total resmi
-  const calculatedTotal = booking.items.reduce((sum, item) => sum + item.subtotal, 0);
-  const finalAmount = calculatedTotal > 0 ? calculatedTotal : booking.total;
-
-  // Batalkan percobaan Snap pending yang pernah dibuat
-  const priorPending = await prisma.payment.findMany({
-    where: { bookingId: booking.id, type: "INVOICE", status: "PENDING" },
-  });
-
-  for (const p of priorPending) {
-    await midtransService.cancel(p.orderId);
-  }
-
-  const orderId = `${booking.code}-CASH-${Date.now().toString().slice(-6)}`;
-  const now = new Date();
-
-  const result = await prisma.$transaction(async (tx) => {
-    // Batalkan di DB
-    await tx.payment.updateMany({
-      where: { bookingId: booking.id, type: "INVOICE", status: "PENDING" },
-      data: { status: "CANCELLED" },
-    });
-
-    const invoiceNumber = booking.invoiceNumber || (await generateInvoiceNumber(tx));
-
-    const payment = await tx.payment.create({
-      data: {
-        bookingId: booking.id,
-        type: "INVOICE",
-        method: "CASH",
-        orderId,
-        amount: finalAmount,
-        status: "PAID",
-        receivedById: actor.id,
-        paidAt: now,
-      },
-      select: publicPaymentSelect,
-    });
-
-    const updatedBooking = await tx.booking.update({
-      where: { id: booking.id },
-      data: {
-        paymentStatus: "PAID",
-        invoiceNumber,
-        total: finalAmount,
-      },
-      include: {
-        customer: { select: { id: true, name: true, email: true } },
-      },
-    });
-
-    // Catat AuditLog
-    await tx.auditLog.create({
-      data: {
-        actorId: actor.id,
-        action: "PAYMENT_CASH_RECEIVED",
-        entity: "Booking",
-        entityId: String(booking.id),
-        after: {
-          paymentId: payment.id,
-          amount: finalAmount,
+  const result = await prisma.$transaction(
+    async (tx) => {
+      await lockBooking(tx, bookingId);
+      const booking = await tx.booking.findUnique({
+        where: { id: bookingId },
+        include: { items: { where: { approvalStatus: "APPROVED" }, select: { subtotal: true } } },
+      });
+      if (!booking) throw new NotFoundError("Booking tidak ditemukan", "BOOKING_NOT_FOUND");
+      if (booking.status !== "READY_FOR_PICKUP") {
+        throw new ConflictError("Kendaraan belum siap diambil", "INVALID_BOOKING_STATUS");
+      }
+      if (booking.paymentStatus === "PAID") {
+        throw new ConflictError("Booking ini telah lunas dibayar", "BOOKING_ALREADY_PAID");
+      }
+      const amount = booking.items.reduce((sum, item) => sum + item.subtotal, 0);
+      if (amount <= 0 || !Number.isSafeInteger(amount) || amount > 2147483647) {
+        throw new BadRequestError("Total tagihan tidak valid", "INVALID_TOTAL_AMOUNT");
+      }
+      const priorPending = await tx.payment.findMany({
+        where: { bookingId, type: "INVOICE", status: "PENDING" },
+        select: { orderId: true },
+      });
+      await tx.payment.updateMany({
+        where: { bookingId, type: "INVOICE", status: "PENDING" },
+        data: { status: "CANCELLED" },
+      });
+      const invoiceNumber = booking.invoiceNumber || (await generateInvoiceNumber(tx));
+      const payment = await tx.payment.create({
+        data: {
+          bookingId,
+          type: "INVOICE",
+          method: "CASH",
+          orderId: `${booking.code}-CASH-${crypto.randomBytes(6).toString("hex")}`,
+          amount,
+          status: "PAID",
           receivedById: actor.id,
-          invoiceNumber,
+          paidAt: new Date(),
         },
-        ip,
-      },
-    });
-
-    // Notifikasi customer
-    await tx.notification.create({
-      data: {
-        userId: booking.customerId,
-        type: "PAYMENT",
-        title: "Pembayaran Tunai Diterima",
-        body: `Pembayaran tunai tagihan servis booking ${booking.code} sebesar Rp ${finalAmount.toLocaleString("id-ID")} telah diterima oleh kasir.`,
-        data: { bookingId: booking.id, paymentId: payment.id, invoiceNumber },
-      },
-    });
-
-    return { payment, booking: updatedBooking, invoiceNumber };
-  });
-
+        select: publicPaymentSelect,
+      });
+      const updatedBooking = await tx.booking.update({
+        where: { id: bookingId },
+        data: { paymentStatus: "PAID", invoiceNumber, total: amount },
+        select: { id: true, code: true, paymentStatus: true, invoiceNumber: true, total: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          action: "PAYMENT_CASH_RECEIVED",
+          entity: "Booking",
+          entityId: String(bookingId),
+          after: { paymentId: payment.id, amount, receivedById: actor.id, invoiceNumber },
+          ip,
+        },
+      });
+      await tx.notification.create({
+        data: {
+          userId: booking.customerId,
+          type: "PAYMENT",
+          title: "Pembayaran Tunai Diterima",
+          body: `Pembayaran booking ${booking.code} telah diterima kasir.`,
+          data: { bookingId, paymentId: payment.id, invoiceNumber },
+        },
+      });
+      return {
+        payment,
+        booking: updatedBooking,
+        invoiceNumber,
+        priorPending,
+        customerId: booking.customerId,
+        outletId: booking.outletId,
+      };
+    },
+    { maxWait: 15000, timeout: 20000 }
+  );
+  await Promise.all(result.priorPending.map((p) => midtransService.cancel(p.orderId)));
   emitRealtimeEvent(
     "payment:updated",
-    { bookingId: booking.id, paymentId: result.payment.id, status: "PAID" },
-    [`user:${booking.customerId}`, `outlet:${booking.outletId}:staff`, "admin"]
+    { bookingId, paymentId: result.payment.id, status: "PAID" },
+    [`user:${result.customerId}`, `outlet:${result.outletId}:staff`, "admin"]
   );
-
-  return result;
+  return { payment: result.payment, booking: result.booking, invoiceNumber: result.invoiceNumber };
 };
 
 /**
@@ -495,7 +470,7 @@ export const handleMidtransNotification = async (payload) => {
   const expectedAmount = existingPayment.amount;
   const actualAmount = Math.round(Number(verifiedStatus.gross_amount));
 
-  if (expectedAmount !== actualAmount) {
+  if (Number(verifiedStatus.gross_amount) !== expectedAmount || expectedAmount !== actualAmount) {
     logger.error(
       { expectedAmount, actualAmount, orderId },
       "Jumlah pembayaran notifikasi tidak sesuai dengan tagihan di database"
@@ -545,11 +520,23 @@ export const handleMidtransNotification = async (payload) => {
 
   // 6. Transaksi update status, penanganan duplikasi, dan alokasi invoice
   const result = await prisma.$transaction(async (tx) => {
+    await lockBooking(tx, existingPayment.bookingId);
     const currentPayment = await tx.payment.findUnique({
       where: { id: existingPayment.id },
       include: { booking: true },
     });
     const booking = currentPayment.booking;
+    const terminal = ["PAID", "DUPLICATE", "REFUNDED"];
+    if (
+      currentPayment.status === mappedStatus ||
+      (terminal.includes(currentPayment.status) && mappedStatus !== "REFUNDED")
+    ) {
+      return {
+        payment: currentPayment,
+        isDuplicate: currentPayment.status === "DUPLICATE",
+        ignored: true,
+      };
+    }
 
     // A. Pembayaran INVOICE
     if (currentPayment.type === "INVOICE") {
@@ -725,8 +712,11 @@ export const handleMidtransNotification = async (payload) => {
  * Menarik status resmi transaksi dari Midtrans secara manual (fallback jika webhook terlambat)
  */
 export const syncPaymentStatus = async ({ actor, orderId }) => {
-  const payment = await prisma.payment.findUnique({
-    where: { orderId },
+  if (!["CUSTOMER", "ADMIN"].includes(actor.role)) {
+    throw new ForbiddenError("Anda tidak berwenang menyinkronkan pembayaran", "FORBIDDEN");
+  }
+  const payment = await prisma.payment.findFirst({
+    where: { orderId, ...(actor.role === "CUSTOMER" ? { booking: { customerId: actor.id } } : {}) },
     include: { booking: true },
   });
 
@@ -740,7 +730,17 @@ export const syncPaymentStatus = async ({ actor, orderId }) => {
   }
 
   // Tarik status dari Midtrans
-  const verifiedStatus = await midtransService.getStatus(orderId);
+  let verifiedStatus;
+  try {
+    verifiedStatus = await midtransService.getStatus(orderId);
+  } catch (error) {
+    // Snap belum menjadi transaksi Core sampai pelanggan memilih metode pembayaran.
+    if (error.code !== "PAYMENT_NOT_FOUND" || payment.status !== "PENDING") throw error;
+    return prisma.payment.findUnique({
+      where: { id: payment.id },
+      select: publicPaymentSelect,
+    });
+  }
 
   // Buat payload simulasi webhook resmi dan proses menggunakan handler webhook
   const syntheticPayload = {

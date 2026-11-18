@@ -8,7 +8,7 @@ import { buildPaginationMeta, parsePagination, parseSort } from "../utils/pagina
 import { BadRequestError, ConflictError, NotFoundError } from "../utils/errors.js";
 import { recordAuditLog } from "./audit.service.js";
 import { buildStaffInviteEmail, sendMail } from "./mail.service.js";
-import { revokeAllUserSessions } from "./sessionTokens.js";
+import { revokeAllUserSessions } from "./sessionTokens.service.js";
 
 const USER_SORT_FIELDS = ["id", "name", "email", "role", "createdAt"];
 

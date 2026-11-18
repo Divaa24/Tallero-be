@@ -1,5 +1,5 @@
 import { sendSuccess } from "../utils/response.js";
-import * as catalogCategories from "../services/catalogCategories.js";
+import * as catalogCategories from "../services/catalogCategories.service.js";
 import * as catalogService from "../services/catalog.service.js";
 
 export const listPublicCategories = async (req, res) => {

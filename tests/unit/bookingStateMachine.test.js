@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LEGAL_TRANSITIONS, transition } from "../../src/services/bookingStateMachine.js";
+import { LEGAL_TRANSITIONS, transition } from "../../src/services/bookingStateMachine.service.js";
 
 const ALL_STATUSES = [
   "PENDING",
@@ -96,8 +96,12 @@ describe("bookingStateMachine", () => {
           if (entry.isDirectory()) {
             scanDirectory(fullPath);
           } else if (entry.isFile() && entry.name.endsWith(".js")) {
-            // Abaikan bookingStateMachine.js
-            if (entry.name === "bookingStateMachine.js") continue;
+            // Abaikan bookingStateMachine.service.js dan bookingStateMachine.js
+            if (
+              entry.name === "bookingStateMachine.service.js" ||
+              entry.name === "bookingStateMachine.js"
+            )
+              continue;
 
             const content = fs.readFileSync(fullPath, "utf-8");
             // Cari pemanggilan update/updateMany pada model booking yang memodifikasi status

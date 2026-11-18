@@ -1,9 +1,9 @@
 import { sendSuccess } from "../utils/response.js";
-import * as bookingsService from "../services/bookings.service.js";
+import * as queueService from "../services/queue.service.js";
 import * as staffService from "../services/staff.service.js";
 
 export const getQueue = async (req, res) => {
-  const data = await bookingsService.getStaffQueue({
+  const data = await queueService.getStaffQueue({
     actor: req.user,
     outletId: req.valid.query.outletId,
   });
@@ -11,7 +11,7 @@ export const getQueue = async (req, res) => {
 };
 
 export const claimNext = async (req, res) => {
-  const data = await bookingsService.claimNextBooking({
+  const data = await queueService.claimNextBooking({
     actor: req.user,
   });
   return sendSuccess(res, {
@@ -21,7 +21,7 @@ export const claimNext = async (req, res) => {
 };
 
 export const getMeJobs = async (req, res) => {
-  const data = await bookingsService.getStaffMeJobs({
+  const data = await queueService.getStaffMeJobs({
     actor: req.user,
   });
   return sendSuccess(res, { data });

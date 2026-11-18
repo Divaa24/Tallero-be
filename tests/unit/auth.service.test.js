@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import prisma, { withDeleted } from "../../src/config/prisma.js";
 import env from "../../src/config/env.js";
 import * as mailService from "../../src/services/mail.service.js";
-import * as registrationOtp from "../../src/services/registrationOtp.js";
+import * as registrationOtp from "../../src/services/registrationOtp.service.js";
 import * as authService from "../../src/services/auth.service.js";
-import * as sessionTokens from "../../src/services/sessionTokens.js";
+import * as sessionTokens from "../../src/services/sessionTokens.service.js";
 import { BadGatewayError } from "../../src/utils/errors.js";
 import { hashPassword, hmacSha256, sha256, verifyPassword } from "../../src/utils/crypto.js";
 

@@ -1,7 +1,7 @@
 import prisma from "../config/prisma.js";
 import logger from "../config/logger.js";
 import RULES from "../config/rules.js";
-import { transition } from "../services/bookingStateMachine.js";
+import { transition } from "../services/bookingStateMachine.service.js";
 import { emitRealtimeEvent } from "../services/realtime.service.js";
 
 /**

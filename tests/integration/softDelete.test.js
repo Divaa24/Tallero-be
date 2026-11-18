@@ -8,12 +8,18 @@ describe("Integration: Soft-Delete, Global Omit, lockOutlet & Seed (PostgreSQL)"
   let dbReady = false;
 
   beforeAll(async () => {
-    await prisma.$queryRaw`SELECT 1`;
-    dbReady = true;
-    await resetTestDb();
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbReady = true;
+      await resetTestDb();
+    } catch (error) {
+      dbReady = false;
+      throw error;
+    }
   });
 
   beforeEach(async () => {
+    if (!dbReady) return;
     await resetTestDb();
   });
 
@@ -29,6 +35,7 @@ describe("Integration: Soft-Delete, Global Omit, lockOutlet & Seed (PostgreSQL)"
   });
 
   it("find tidak mengembalikan record yang di-soft-delete, delete menjadi update, dan withDeleted bisa melihat", async () => {
+    if (!dbReady) return;
     const passwordHash = await hashPassword("PasswordKuat123!");
     const user = await prisma.user.create({
       data: {
@@ -79,6 +86,7 @@ describe("Integration: Soft-Delete, Global Omit, lockOutlet & Seed (PostgreSQL)"
   });
 
   it("Vehicle.activePlate membebaskan plat nomor setelah soft-delete sehingga dapat didaftarkan kembali", async () => {
+    if (!dbReady) return;
     const owner = await prisma.user.create({
       data: {
         name: "Siti Rahma",
@@ -137,6 +145,7 @@ describe("Integration: Soft-Delete, Global Omit, lockOutlet & Seed (PostgreSQL)"
   });
 
   it("lockOutlet mengunci baris outlet di dalam prisma.$transaction dan delete inside tx tetap atomik", async () => {
+    if (!dbReady) return;
     const outlet = await prisma.outlet.create({
       data: {
         name: "Tallero Jakarta Selatan",
@@ -163,6 +172,7 @@ describe("Integration: Soft-Delete, Global Omit, lockOutlet & Seed (PostgreSQL)"
   });
 
   it("seedInitialAdmin bersifat idempotent (tidak duplikat jika dijalankan berulang)", async () => {
+    if (!dbReady) return;
     const first = await seedInitialAdmin();
     expect(first.created).toBe(true);
     expect(first.user.role).toBe("ADMIN");

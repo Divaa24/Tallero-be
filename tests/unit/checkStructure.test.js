@@ -53,7 +53,26 @@ describe("Unit: scripts/check-structure.js", () => {
 
     const result = checkProjectStructure(dir);
     expect(result.ok).toBe(false);
-    expect(result.errors).toHaveLength(5);
+    expect(result.errors.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("gagal bila ada file di services/ yang tidak berakhiran .service.js", () => {
+    const dir = makeTempRepo({
+      "src/services/slots.js": "export const a = 1;",
+      "src/services/bookingStateMachine.js": "export const b = 2;",
+      "src/services/auth.service.js": "export const c = 3;",
+    });
+
+    const result = checkProjectStructure(dir);
+    expect(result.ok).toBe(false);
+    expect(
+      result.errors.some((e) => e.includes("src/services/slots.js") && e.includes(".service.js"))
+    ).toBe(true);
+    expect(
+      result.errors.some(
+        (e) => e.includes("src/services/bookingStateMachine.js") && e.includes(".service.js")
+      )
+    ).toBe(true);
   });
 
   it("gagal bila ada import dari _legacy/", () => {

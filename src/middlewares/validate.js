@@ -32,7 +32,7 @@ export const validate = (schemas = {}, target) => {
 
   return (req, res, next) => {
     try {
-      const valid = req.valid || {};
+      const valid = { ...req.valid };
       const validationErrors = [];
 
       if (normalizedSchemas.params) {
@@ -43,7 +43,7 @@ export const validate = (schemas = {}, target) => {
           valid.params = result.data;
         }
       } else {
-        valid.params = req.params;
+        valid.params ??= req.params;
       }
 
       // Express 5 req.query bersifat read-only; jangan pernah di-overwrite
@@ -55,7 +55,7 @@ export const validate = (schemas = {}, target) => {
           valid.query = result.data;
         }
       } else {
-        valid.query = req.query;
+        valid.query ??= req.query;
       }
 
       if (normalizedSchemas.body) {
@@ -71,7 +71,7 @@ export const validate = (schemas = {}, target) => {
           valid.body = result.data;
         }
       } else {
-        valid.body = req.body;
+        valid.body ??= req.body;
       }
 
       if (validationErrors.length > 0) {

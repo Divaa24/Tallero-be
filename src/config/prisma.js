@@ -113,7 +113,7 @@ const basePrisma = new PrismaClient({
   log:
     env.NODE_ENV === "development"
       ? [
-          { emit: "event", level: "query" },
+          ...(env.LOG_SQL_QUERIES ? [{ emit: "event", level: "query" }] : []),
           { emit: "event", level: "error" },
           { emit: "event", level: "info" },
           { emit: "event", level: "warn" },
@@ -121,7 +121,7 @@ const basePrisma = new PrismaClient({
       : [{ emit: "event", level: "error" }],
 });
 
-if (env.NODE_ENV === "development") {
+if (env.NODE_ENV === "development" && env.LOG_SQL_QUERIES) {
   basePrisma.$on("query", (e) => {
     logger.debug({ query: e.query, duration: `${e.duration}ms` }, "Prisma Query");
   });
@@ -181,6 +181,19 @@ export const lockOutlet = async (tx, outletId) => {
 
   const rows = await tx.$queryRaw`SELECT id FROM outlets WHERE id = ${id} FOR UPDATE`;
   return rows[0] ?? null;
+};
+
+export const lockCustomer = async (tx, customerId) => {
+  await tx.$queryRaw`SELECT id FROM users WHERE id = ${customerId} FOR UPDATE`;
+};
+
+export const lockBooking = async (tx, bookingId) => {
+  await tx.$queryRaw`SELECT id FROM bookings WHERE id = ${bookingId} FOR UPDATE`;
+};
+
+export const lockInvoices = async (tx) => {
+  // Invoice numbering spans every outlet; hold the shared lock until commit.
+  await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(1844001)`;
 };
 
 export default prisma;

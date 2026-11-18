@@ -72,6 +72,9 @@ vi.mock("../../src/config/prisma.js", () => ({
   prisma: mockPrisma,
   withDeleted: mockPrisma,
   lockOutlet: vi.fn(),
+  lockCustomer: vi.fn(),
+  lockBooking: vi.fn(),
+  lockInvoices: vi.fn(),
 }));
 
 import * as bookingsService from "../../src/services/bookings.service.js";

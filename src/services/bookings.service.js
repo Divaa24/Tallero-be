@@ -4,7 +4,8 @@ import prisma from "../config/prisma.js";
 import env from "../config/env.js";
 import RULES from "../config/rules.js";
 import logger from "../config/logger.js";
-import { lockOutlet } from "../config/prisma.js";
+import { recordAuditLog } from "./audit.service.js";
+import { lockOutlet, lockCustomer, lockBooking } from "../config/prisma.js";
 import { hmacSha256, safeCompare } from "../utils/crypto.js";
 import { buildPaginationMeta, parsePagination, parseSort } from "../utils/pagination.js";
 import { createSignedUrl } from "../utils/signedUrl.js";
@@ -15,8 +16,15 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "../utils/errors.js";
-import { generateOutletSlots, validateAndComputeBookingSlot } from "./slots.js";
-import { transition } from "./bookingStateMachine.js";
+import { getOutletAvailability, validateAndComputeBookingSlot } from "./availability.service.js";
+import { transition } from "./bookingStateMachine.service.js";
+import {
+  startBookingInternal,
+  claimNextBooking,
+  getStaffQueue,
+  getQueuePosition,
+  getStaffMeJobs,
+} from "./queue.service.js";
 import { emitRealtimeEvent } from "./realtime.service.js";
 import { saveProcessedBookingPhoto } from "./files.service.js";
 import { sendMail, buildReadyForPickupEmail } from "./mail.service.js";
@@ -166,284 +174,221 @@ export const verifyBookingQrPayload = (payload) => {
   };
 };
 
-export const getOutletAvailability = async ({
-  outletId,
-  date,
-  dateStr,
-  serviceIds = [],
-}) => {
-  const targetDate = date || dateStr;
-  const outlet = await prisma.outlet.findFirst({
-    where: { id: outletId, isActive: true, deletedAt: null },
-  });
-
-  if (!outlet) {
-    throw new NotFoundError("Outlet tidak ditemukan atau tidak aktif", "OUTLET_NOT_FOUND");
-  }
-
-  const serviceIdList = Array.isArray(serviceIds)
-    ? serviceIds
-    : typeof serviceIds === "string"
-      ? serviceIds.split(",").map((s) => s.trim()).filter(Boolean)
-      : typeof serviceIds === "number"
-        ? [serviceIds]
-        : [];
-
-  const [closures, existingBookings, selectedServices] = await Promise.all([
-    prisma.outletClosure.findMany({
-      where: { outletId, date: new Date(`${targetDate}T00:00:00.000Z`) },
-    }),
-    prisma.booking.findMany({
-      where: {
-        outletId,
-        scheduledAt: {
-          gte: new Date(`${targetDate}T00:00:00.000Z`),
-          lte: new Date(`${targetDate}T23:59:59.999Z`),
-        },
-        status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      },
-      select: { scheduledAt: true },
-    }),
-    serviceIdList.length > 0
-      ? prisma.service.findMany({
-          where: { id: { in: serviceIdList.map(Number) }, isActive: true },
-          select: { estimatedMinutes: true },
-        })
-      : [],
-  ]);
-
-  const totalEstimatedMinutes = selectedServices.reduce(
-    (acc, s) => acc + (s.estimatedMinutes || 0),
-    0
-  );
-
-  const slotResult = generateOutletSlots({
-    outlet,
-    dateStr: targetDate,
-    closures,
-    existingBookings,
-    serviceIds: serviceIdList,
-    now: new Date(),
-  });
-
-  return {
-    ...slotResult,
-    totalEstimatedMinutes,
-  };
-};
+export { getOutletAvailability };
 
 export const createBooking = async ({ actor, data }) => {
-  const [outlet, vehicle, customerActiveBookings, vehicleActiveBookings] = await Promise.all([
-    prisma.outlet.findFirst({
-      where: { id: data.outletId, isActive: true },
-    }),
-    prisma.vehicle.findFirst({
-      where: { id: data.vehicleId, userId: actor.id },
-    }),
-    prisma.booking.count({
-      where: {
-        customerId: actor.id,
-        status: { notIn: ["COMPLETED", "CANCELLED", "NO_SHOW"] },
-      },
-    }),
-    prisma.booking.count({
-      where: {
-        vehicleId: data.vehicleId,
-        status: { notIn: ["COMPLETED", "CANCELLED", "NO_SHOW"] },
-      },
-    }),
-  ]);
-
-  if (!outlet) {
-    throw new NotFoundError("Outlet tidak ditemukan atau tidak aktif", "OUTLET_NOT_FOUND");
-  }
-
-  if (!vehicle) {
-    throw new NotFoundError("Kendaraan tidak ditemukan atau bukan milik Anda", "VEHICLE_NOT_FOUND");
-  }
-
-  if (customerActiveBookings >= RULES.MAX_ACTIVE_BOOKINGS_PER_CUSTOMER) {
-    throw new ConflictError(
-      `Pelanggan telah mencapai batas maksimal ${RULES.MAX_ACTIVE_BOOKINGS_PER_CUSTOMER} booking aktif secara bersamaan`,
-      "MAX_ACTIVE_BOOKINGS_EXCEEDED"
-    );
-  }
-
-  if (vehicleActiveBookings > 0) {
-    throw new ConflictError(
-      "Kendaraan ini masih memiliki reservasi aktif yang belum selesai",
-      "VEHICLE_HAS_ACTIVE_BOOKING"
-    );
-  }
-
-  const closures = await prisma.outletClosure.findMany({
-    where: { outletId: outlet.id },
-  });
-
-  const { scheduledAt, slotEndAt, startDt } = validateAndComputeBookingSlot({
-    outlet,
-    scheduledAt: data.scheduledAt,
-    now: new Date(),
-    closures,
-  });
-
-  const serviceItemsInput = data.items.filter((i) => i.type === "SERVICE");
-  const sparepartItemsInput = data.items.filter((i) => i.type === "SPAREPART");
-
-  const serviceIds = serviceItemsInput.map((i) => i.serviceId);
-  const sparepartIds = sparepartItemsInput.map((i) => i.sparepartId);
-
-  const [servicesDb, sparepartsDb] = await Promise.all([
-    serviceIds.length > 0
-      ? prisma.service.findMany({
-          where: { id: { in: serviceIds }, isActive: true },
-        })
-      : [],
-    sparepartIds.length > 0
-      ? prisma.sparepart.findMany({
-          where: { id: { in: sparepartIds }, isActive: true },
-        })
-      : [],
-  ]);
-
-  if (servicesDb.length !== serviceIds.length) {
-    throw new BadRequestError(
-      "Satu atau lebih layanan tidak ditemukan atau tidak aktif",
-      "INVALID_SERVICE"
-    );
-  }
-
-  if (sparepartsDb.length !== sparepartIds.length) {
-    throw new BadRequestError(
-      "Satu atau lebih suku cadang tidak ditemukan atau tidak aktif",
-      "INVALID_SPAREPART"
-    );
-  }
-
-  for (const s of servicesDb) {
-    if (s.vehicleType && s.vehicleType !== vehicle.type) {
-      throw new BusinessRuleError(
-        `Layanan "${s.name}" hanya diperuntukkan bagi kendaraan jenis ${s.vehicleType}`,
-        "INCOMPATIBLE_VEHICLE_TYPE"
-      );
-    }
-  }
-
-  for (const partInput of sparepartItemsInput) {
-    const partDb = sparepartsDb.find((p) => p.id === partInput.sparepartId);
-    if (!partDb || partDb.stock < partInput.quantity) {
-      throw new ConflictError(
-        `Stok suku cadang "${partDb?.name || partInput.sparepartId}" tidak mencukupi untuk jumlah yang diminta`,
-        "SPAREPART_OUT_OF_STOCK"
-      );
-    }
-  }
-
-  const itemsToCreate = [];
-  let calculatedTotal = 0;
-
-  for (const sInput of serviceItemsInput) {
-    const sDb = servicesDb.find((s) => s.id === sInput.serviceId);
-    const subtotal = sDb.price * sInput.quantity;
-    calculatedTotal += subtotal;
-    itemsToCreate.push({
-      type: "SERVICE",
-      serviceId: sDb.id,
-      nameSnapshot: sDb.name,
-      unitPrice: sDb.price,
-      quantity: sInput.quantity,
-      subtotal,
-      source: "CUSTOMER_BOOKING",
-      approvalStatus: "APPROVED",
-      requestedById: actor.id,
-      decidedById: actor.id,
-      decidedAt: new Date(),
-      stockDeducted: false,
-    });
-  }
-
-  for (const pInput of sparepartItemsInput) {
-    const pDb = sparepartsDb.find((p) => p.id === pInput.sparepartId);
-    const subtotal = pDb.price * pInput.quantity;
-    calculatedTotal += subtotal;
-    itemsToCreate.push({
-      type: "SPAREPART",
-      sparepartId: pDb.id,
-      nameSnapshot: pDb.name,
-      unitPrice: pDb.price,
-      quantity: pInput.quantity,
-      subtotal,
-      source: "CUSTOMER_BOOKING",
-      approvalStatus: "APPROVED",
-      requestedById: actor.id,
-      decidedById: actor.id,
-      decidedAt: new Date(),
-      stockDeducted: false,
-    });
-  }
-
-  const created = await prisma.$transaction(async (tx) => {
-    await lockOutlet(tx, outlet.id);
-
-    const activeInSlot = await tx.booking.count({
-      where: {
-        outletId: outlet.id,
-        scheduledAt,
-        status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      },
-    });
-
-    if (activeInSlot >= outlet.slotCapacity) {
-      throw new ConflictError(
-        "Kapasitas slot untuk waktu yang dipilih telah penuh. Silakan pilih slot lain.",
-        "SLOT_FULL"
-      );
-    }
-
-    const dateStr = startDt.toISODate();
-    let bookingCode = "";
-    let attempts = 0;
-    while (attempts < 5) {
-      bookingCode = generateBookingCode(dateStr);
-      const existing = await tx.booking.findUnique({
-        where: { code: bookingCode },
-        select: { id: true },
+  const created = await prisma.$transaction(
+    async (tx) => {
+      await lockCustomer(tx, actor.id);
+      await lockOutlet(tx, data.outletId);
+      const outlet = await tx.outlet.findFirst({
+        where: { id: data.outletId, isActive: true },
       });
-      if (!existing) break;
-      attempts++;
-    }
-
-    const booking = await tx.booking.create({
-      data: {
-        code: bookingCode,
-        customerId: actor.id,
-        outletId: outlet.id,
-        vehicleId: vehicle.id,
-        scheduledAt,
-        slotEndAt,
-        status: "PENDING",
-        customerNotes: data.customerNotes || null,
-        total: calculatedTotal,
-        paymentStatus: "UNPAID",
-        items: {
-          create: itemsToCreate,
+      const vehicle = await tx.vehicle.findFirst({
+        where: { id: data.vehicleId, userId: actor.id },
+      });
+      const customerActiveBookings = await tx.booking.count({
+        where: {
+          customerId: actor.id,
+          status: { notIn: ["COMPLETED", "CANCELLED", "NO_SHOW"] },
         },
-      },
-      select: customerBookingSelect,
-    });
+      });
+      const vehicleActiveBookings = await tx.booking.count({
+        where: {
+          vehicleId: data.vehicleId,
+          status: { notIn: ["COMPLETED", "CANCELLED", "NO_SHOW"] },
+        },
+      });
 
-    await tx.bookingLog.create({
-      data: {
-        bookingId: booking.id,
-        actorId: actor.id,
-        actorRole: actor.role,
-        toStatus: "PENDING",
-        note: "Booking dibuat oleh pelanggan",
-      },
-    });
+      if (!outlet) {
+        throw new NotFoundError("Outlet tidak ditemukan atau tidak aktif", "OUTLET_NOT_FOUND");
+      }
 
-    return booking;
-  });
+      if (!vehicle) {
+        throw new NotFoundError(
+          "Kendaraan tidak ditemukan atau bukan milik Anda",
+          "VEHICLE_NOT_FOUND"
+        );
+      }
+
+      if (customerActiveBookings >= RULES.MAX_ACTIVE_BOOKINGS_PER_CUSTOMER) {
+        throw new ConflictError(
+          `Pelanggan telah mencapai batas maksimal ${RULES.MAX_ACTIVE_BOOKINGS_PER_CUSTOMER} booking aktif secara bersamaan`,
+          "MAX_ACTIVE_BOOKINGS_EXCEEDED"
+        );
+      }
+
+      if (vehicleActiveBookings > 0) {
+        throw new ConflictError(
+          "Kendaraan ini masih memiliki reservasi aktif yang belum selesai",
+          "VEHICLE_HAS_ACTIVE_BOOKING"
+        );
+      }
+
+      const closures = await tx.outletClosure.findMany({
+        where: { outletId: outlet.id },
+      });
+
+      const { scheduledAt, slotEndAt, startDt } = validateAndComputeBookingSlot({
+        outlet,
+        scheduledAt: data.scheduledAt,
+        now: new Date(),
+        closures,
+      });
+
+      const serviceItemsInput = data.items.filter((i) => i.type === "SERVICE");
+      const sparepartItemsInput = data.items.filter((i) => i.type === "SPAREPART");
+
+      const serviceIds = serviceItemsInput.map((i) => i.serviceId);
+      const sparepartIds = sparepartItemsInput.map((i) => i.sparepartId);
+
+      const servicesDb = await (serviceIds.length > 0
+        ? tx.service.findMany({
+            where: { id: { in: serviceIds }, isActive: true },
+          })
+        : []);
+      const sparepartsDb = await (sparepartIds.length > 0
+        ? tx.sparepart.findMany({
+            where: { id: { in: sparepartIds }, isActive: true },
+          })
+        : []);
+
+      if (servicesDb.length !== serviceIds.length) {
+        throw new BadRequestError(
+          "Satu atau lebih layanan tidak ditemukan atau tidak aktif",
+          "INVALID_SERVICE"
+        );
+      }
+
+      if (sparepartsDb.length !== sparepartIds.length) {
+        throw new BadRequestError(
+          "Satu atau lebih suku cadang tidak ditemukan atau tidak aktif",
+          "INVALID_SPAREPART"
+        );
+      }
+
+      for (const s of servicesDb) {
+        if (s.vehicleType && s.vehicleType !== vehicle.type) {
+          throw new BusinessRuleError(
+            `Layanan "${s.name}" hanya diperuntukkan bagi kendaraan jenis ${s.vehicleType}`,
+            "INCOMPATIBLE_VEHICLE_TYPE"
+          );
+        }
+      }
+
+      for (const partInput of sparepartItemsInput) {
+        const partDb = sparepartsDb.find((p) => p.id === partInput.sparepartId);
+        if (!partDb || partDb.stock < partInput.quantity) {
+          throw new ConflictError(
+            `Stok suku cadang "${partDb?.name || partInput.sparepartId}" tidak mencukupi untuk jumlah yang diminta`,
+            "SPAREPART_OUT_OF_STOCK"
+          );
+        }
+      }
+
+      const itemsToCreate = [];
+      let calculatedTotal = 0;
+
+      for (const sInput of serviceItemsInput) {
+        const sDb = servicesDb.find((s) => s.id === sInput.serviceId);
+        const subtotal = sDb.price * sInput.quantity;
+        calculatedTotal += subtotal;
+        itemsToCreate.push({
+          type: "SERVICE",
+          serviceId: sDb.id,
+          nameSnapshot: sDb.name,
+          unitPrice: sDb.price,
+          quantity: sInput.quantity,
+          subtotal,
+          source: "CUSTOMER_BOOKING",
+          approvalStatus: "APPROVED",
+          requestedById: actor.id,
+          decidedById: actor.id,
+          decidedAt: new Date(),
+          stockDeducted: false,
+        });
+      }
+
+      for (const pInput of sparepartItemsInput) {
+        const pDb = sparepartsDb.find((p) => p.id === pInput.sparepartId);
+        const subtotal = pDb.price * pInput.quantity;
+        calculatedTotal += subtotal;
+        itemsToCreate.push({
+          type: "SPAREPART",
+          sparepartId: pDb.id,
+          nameSnapshot: pDb.name,
+          unitPrice: pDb.price,
+          quantity: pInput.quantity,
+          subtotal,
+          source: "CUSTOMER_BOOKING",
+          approvalStatus: "APPROVED",
+          requestedById: actor.id,
+          decidedById: actor.id,
+          decidedAt: new Date(),
+          stockDeducted: false,
+        });
+      }
+
+      const activeInSlot = await tx.booking.count({
+        where: {
+          outletId: outlet.id,
+          scheduledAt,
+          status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        },
+      });
+
+      if (activeInSlot >= outlet.slotCapacity) {
+        throw new ConflictError(
+          "Kapasitas slot untuk waktu yang dipilih telah penuh. Silakan pilih slot lain.",
+          "SLOT_FULL"
+        );
+      }
+
+      const dateStr = startDt.toISODate();
+      let bookingCode = "";
+      let attempts = 0;
+      while (attempts < 5) {
+        bookingCode = generateBookingCode(dateStr);
+        const existing = await tx.booking.findUnique({
+          where: { code: bookingCode },
+          select: { id: true },
+        });
+        if (!existing) break;
+        attempts++;
+      }
+
+      const booking = await tx.booking.create({
+        data: {
+          code: bookingCode,
+          customerId: actor.id,
+          outletId: outlet.id,
+          vehicleId: vehicle.id,
+          scheduledAt,
+          slotEndAt,
+          status: "PENDING",
+          customerNotes: data.customerNotes || null,
+          total: calculatedTotal,
+          paymentStatus: "UNPAID",
+          items: {
+            create: itemsToCreate,
+          },
+        },
+        select: customerBookingSelect,
+      });
+
+      await tx.bookingLog.create({
+        data: {
+          bookingId: booking.id,
+          actorId: actor.id,
+          actorRole: actor.role,
+          toStatus: "PENDING",
+          note: "Booking dibuat oleh pelanggan",
+        },
+      });
+      return booking;
+    },
+    { maxWait: 15000, timeout: 20000 }
+  );
 
   emitRealtimeEvent(
     "booking:created",
@@ -477,8 +422,24 @@ export const listBookings = async ({ actor, query }) => {
   }
 
   if (query.date) {
-    const dayStart = new Date(`${query.date}T00:00:00.000Z`);
-    const dayEnd = new Date(`${query.date}T23:59:59.999Z`);
+    const zone = actor.outletId
+      ? (
+          await prisma.outlet.findUnique({
+            where: { id: actor.outletId },
+            select: { timezone: true },
+          })
+        )?.timezone
+      : query.outletId
+        ? (
+            await prisma.outlet.findUnique({
+              where: { id: query.outletId },
+              select: { timezone: true },
+            })
+          )?.timezone
+        : RULES.TIMEZONE;
+    const day = DateTime.fromISO(query.date, { zone: zone || RULES.TIMEZONE });
+    const dayStart = day.startOf("day").toUTC().toJSDate();
+    const dayEnd = day.endOf("day").toUTC().toJSDate();
     where.scheduledAt = { gte: dayStart, lte: dayEnd };
   }
 
@@ -791,96 +752,6 @@ export const assignMechanic = async ({ actor, bookingId, mechanicId }) => {
 };
 
 /**
- * Helper internal untuk mengecek kepala antrian dan memulai pengerjaan di bawah transaksi
- */
-const startBookingInternal = async (tx, booking, targetMechanicId, actor, now = new Date()) => {
-  // 1. Cek batas pengerjaan aktif mekanik (maksimal 1)
-  const activeJobsCount = await tx.booking.count({
-    where: {
-      mechanicId: targetMechanicId,
-      status: { in: ["IN_PROGRESS", "WAITING_APPROVAL"] },
-    },
-  });
-
-  if (activeJobsCount >= RULES.MAX_ACTIVE_JOBS_PER_MECHANIC) {
-    throw new ConflictError(
-      `Mekanik sudah memiliki ${activeJobsCount} pengerjaan aktif (maksimal ${RULES.MAX_ACTIVE_JOBS_PER_MECHANIC})`,
-      "MAX_ACTIVE_JOBS_EXCEEDED"
-    );
-  }
-
-  // 2. Evaluasi kepala antrian: CHECKED_IN dengan queueNumber terkecil di mana mechanicId IS NULL atau = targetMechanicId
-  const candidateHeadList = await tx.booking.findMany({
-    where: {
-      outletId: booking.outletId,
-      status: "CHECKED_IN",
-      OR: [{ mechanicId: null }, { mechanicId: targetMechanicId }],
-    },
-    orderBy: { queueNumber: "asc" },
-    take: 1,
-  });
-
-  if (candidateHeadList.length === 0) {
-    throw new NotFoundError("Tidak ada booking dalam antrian", "NO_WAITING_BOOKINGS");
-  }
-
-  const headBooking = candidateHeadList[0];
-  if (headBooking.id !== booking.id) {
-    throw new ConflictError(
-      `Pelanggaran urutan antrian: pengerjaan harus sesuai nomor antrian terkecil. Kepala antrian berikutnya adalah #${headBooking.queueNumber} (${headBooking.code})`,
-      "QUEUE_ORDER_VIOLATION",
-      {
-        expectedBookingId: headBooking.id,
-        expectedQueueNumber: headBooking.queueNumber,
-        expectedBookingCode: headBooking.code,
-      }
-    );
-  }
-
-  // 3. Potong stok suku cadang untuk item yang APPROVED secara bersyarat (stock >= qty)
-  const approvedParts = await tx.bookingItem.findMany({
-    where: {
-      bookingId: booking.id,
-      type: "SPAREPART",
-      approvalStatus: "APPROVED",
-      stockDeducted: false,
-    },
-  });
-
-  for (const partItem of approvedParts) {
-    if (!partItem.sparepartId) continue;
-    const deduction = await tx.sparepart.updateMany({
-      where: {
-        id: partItem.sparepartId,
-        stock: { gte: partItem.quantity },
-      },
-      data: {
-        stock: { decrement: partItem.quantity },
-      },
-    });
-
-    if (deduction.count !== 1) {
-      throw new ConflictError(
-        `Stok suku cadang "${partItem.nameSnapshot}" tidak mencukupi untuk memulai pengerjaan`,
-        "STOCK_INSUFFICIENT"
-      );
-    }
-
-    await tx.bookingItem.update({
-      where: { id: partItem.id },
-      data: { stockDeducted: true },
-    });
-  }
-
-  // 4. Lakukan transisi status via state machine
-  return transition(tx, booking.id, "IN_PROGRESS", actor, {
-    mechanicId: targetMechanicId,
-    now,
-    note: `Pengerjaan servis dimulai oleh mekanik ID ${targetMechanicId}`,
-  });
-};
-
-/**
  * POST /bookings/:id/start
  * Staf memulai pengerjaan booking dengan mematuhi aturan kepala antrian & pemotongan stok atomik
  */
@@ -940,285 +811,7 @@ export const startBooking = async ({ actor, bookingId, mechanicId }) => {
   return getBookingById({ actor, bookingId });
 };
 
-/**
- * POST /staff/queue/claim-next
- * Mekanik mengambil pekerjaan berikutnya langsung dari kepala antrian yang tersedia
- */
-export const claimNextBooking = async ({ actor }) => {
-  if (actor.role !== "MECHANIC") {
-    throw new ForbiddenError("Hanya mekanik yang dapat melakukan claim-next antrian", "FORBIDDEN");
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    await lockOutlet(tx, actor.outletId);
-
-    // Cari kepala antrian untuk mekanik ini
-    const candidateList = await tx.booking.findMany({
-      where: {
-        outletId: actor.outletId,
-        status: "CHECKED_IN",
-        OR: [{ mechanicId: null }, { mechanicId: actor.id }],
-      },
-      orderBy: { queueNumber: "asc" },
-      take: 1,
-    });
-
-    if (candidateList.length === 0) {
-      throw new NotFoundError(
-        "Tidak ada booking yang menunggu dalam antrian saat ini",
-        "NO_WAITING_BOOKINGS"
-      );
-    }
-
-    const bookingToClaim = candidateList[0];
-    return startBookingInternal(tx, bookingToClaim, actor.id, actor);
-  });
-
-  for (const evt of result.events) {
-    emitRealtimeEvent(evt.event, evt.payload, evt.rooms);
-  }
-  emitRealtimeEvent(
-    "queue:updated",
-    { outletId: actor.outletId, action: "CLAIMED", bookingId: result.booking.id },
-    [`outlet:${actor.outletId}:staff`, "admin"]
-  );
-
-  return getBookingById({ actor, bookingId: result.booking.id });
-};
-
-/**
- * GET /staff/queue
- * Menampilkan ringkasan antrian 5 bagian (waiting, inProgress, waitingApproval, readyForPickup, expectedToday)
- * dengan penyembunyian/masking data customer sesuai AGENTS.md §6.
- */
-export const getStaffQueue = async ({ actor, outletId }) => {
-  let targetOutletId = actor.role === "MECHANIC" ? actor.outletId : outletId;
-
-  if (!targetOutletId) {
-    const firstActiveOutlet = await prisma.outlet.findFirst({
-      where: { isActive: true, deletedAt: null },
-      select: { id: true },
-    });
-    if (!firstActiveOutlet) {
-      return {
-        outletId: null,
-        waiting: [],
-        inProgress: [],
-        waitingApproval: [],
-        readyForPickup: [],
-        expectedToday: [],
-      };
-    }
-    targetOutletId = firstActiveOutlet.id;
-  }
-
-  const outlet = await prisma.outlet.findFirst({
-    where: { id: targetOutletId, isActive: true, deletedAt: null },
-  });
-
-  if (!outlet) {
-    throw new NotFoundError("Outlet tidak ditemukan atau tidak aktif", "OUTLET_NOT_FOUND");
-  }
-
-  const tz = outlet.timezone || RULES.TIMEZONE;
-  const todayStr = DateTime.now().setZone(tz).toISODate();
-  const dayStart = new Date(`${todayStr}T00:00:00.000Z`);
-  const dayEnd = new Date(`${todayStr}T23:59:59.999Z`);
-
-  const select = getBookingSelectForRole(actor.role);
-
-  const [waitingRaw, inProgressRaw, waitingApprovalRaw, readyForPickupRaw, expectedTodayRaw] =
-    await Promise.all([
-      prisma.booking.findMany({
-        where: { outletId: targetOutletId, status: "CHECKED_IN" },
-        select,
-        orderBy: { queueNumber: "asc" },
-      }),
-      prisma.booking.findMany({
-        where: { outletId: targetOutletId, status: "IN_PROGRESS" },
-        select,
-        orderBy: { startedAt: "asc" },
-      }),
-      prisma.booking.findMany({
-        where: { outletId: targetOutletId, status: "WAITING_APPROVAL" },
-        select,
-        orderBy: { updatedAt: "asc" },
-      }),
-      prisma.booking.findMany({
-        where: { outletId: targetOutletId, status: "READY_FOR_PICKUP" },
-        select,
-        orderBy: { readyAt: "asc" },
-      }),
-      prisma.booking.findMany({
-        where: {
-          outletId: targetOutletId,
-          status: "PENDING",
-          scheduledAt: { gte: dayStart, lte: dayEnd },
-        },
-        select,
-        orderBy: { scheduledAt: "asc" },
-      }),
-    ]);
-
-  const waiting = waitingRaw.map((row, idx) => ({
-    ...formatBookingForActor(row, actor),
-    isNext: idx === 0,
-  }));
-
-  const inProgress = inProgressRaw.map((r) => formatBookingForActor(r, actor));
-  const waitingApproval = waitingApprovalRaw.map((r) => formatBookingForActor(r, actor));
-  const readyForPickup = readyForPickupRaw.map((r) => formatBookingForActor(r, actor));
-  const expectedToday = expectedTodayRaw.map((r) => formatBookingForActor(r, actor));
-
-  return {
-    outletId: targetOutletId,
-    outletName: outlet.name,
-    date: todayStr,
-    waiting,
-    inProgress,
-    waitingApproval,
-    readyForPickup,
-    expectedToday,
-  };
-};
-
-/**
- * GET /bookings/:id/queue-position
- * Customer pemilik booking melihat posisi nomor antrian, antrian di depan, dan estimasi waktu tunggu
- */
-export const getQueuePosition = async ({ actor, bookingId }) => {
-  const booking = await prisma.booking.findFirst({
-    where: {
-      id: bookingId,
-      customerId: actor.id,
-    },
-    select: {
-      id: true,
-      code: true,
-      outletId: true,
-      status: true,
-      queueNumber: true,
-      queueDate: true,
-    },
-  });
-
-  if (!booking) {
-    throw new NotFoundError("Booking tidak ditemukan", "BOOKING_NOT_FOUND");
-  }
-
-  if (booking.status !== "CHECKED_IN") {
-    return {
-      bookingId: booking.id,
-      code: booking.code,
-      status: booking.status,
-      queueNumber: booking.queueNumber,
-      aheadCount: 0,
-      estimatedWaitMinutes: 0,
-      activeMechanicCount: 0,
-    };
-  }
-
-  const [aheadBookings, activeMechanicCount] = await Promise.all([
-    prisma.booking.findMany({
-      where: {
-        outletId: booking.outletId,
-        status: "CHECKED_IN",
-        queueNumber: { lt: booking.queueNumber },
-      },
-      select: {
-        id: true,
-        items: {
-          select: {
-            service: { select: { estimatedMinutes: true } },
-          },
-        },
-      },
-    }),
-    prisma.user.count({
-      where: {
-        outletId: booking.outletId,
-        role: "MECHANIC",
-        isActive: true,
-        deletedAt: null,
-      },
-    }),
-  ]);
-
-  const aheadCount = aheadBookings.length;
-  const divider = Math.max(1, activeMechanicCount);
-
-  // Estimasi durasi booking di depan (rata-rata 30 menit jika tidak didefinisikan)
-  const totalAheadMinutes = aheadBookings.reduce((sum, b) => {
-    const serviceMinutes = b.items.reduce(
-      (acc, it) => acc + (it.service?.estimatedMinutes || 30),
-      0
-    );
-    return sum + (serviceMinutes > 0 ? serviceMinutes : 30);
-  }, 0);
-
-  const estimatedWaitMinutes =
-    aheadCount === 0 ? 0 : Math.max(5, Math.ceil(totalAheadMinutes / divider));
-
-  return {
-    bookingId: booking.id,
-    code: booking.code,
-    status: booking.status,
-    queueNumber: booking.queueNumber,
-    aheadCount,
-    estimatedWaitMinutes,
-    activeMechanicCount,
-  };
-};
-
-/**
- * GET /staff/me/jobs
- * Mekanik melihat daftar pekerjaan yang ditugaskan kepada dirinya
- */
-export const getStaffMeJobs = async ({ actor }) => {
-  if (actor.role !== "MECHANIC") {
-    throw new ForbiddenError(
-      "Endpoint ini hanya dapat diakses oleh pengguna dengan role MECHANIC",
-      "FORBIDDEN"
-    );
-  }
-
-  const select = getBookingSelectForRole("MECHANIC");
-
-  const [activeJobRaw, assignedUpcomingRaw, completedTodayRaw] = await Promise.all([
-    prisma.booking.findFirst({
-      where: {
-        mechanicId: actor.id,
-        status: { in: ["IN_PROGRESS", "WAITING_APPROVAL"] },
-      },
-      select,
-    }),
-    prisma.booking.findMany({
-      where: {
-        mechanicId: actor.id,
-        status: "CHECKED_IN",
-      },
-      select,
-      orderBy: { queueNumber: "asc" },
-    }),
-    prisma.booking.findMany({
-      where: {
-        mechanicId: actor.id,
-        status: { in: ["READY_FOR_PICKUP", "COMPLETED"] },
-        updatedAt: {
-          gte: new Date(new Date().setHours(0, 0, 0, 0)),
-        },
-      },
-      select,
-      orderBy: { updatedAt: "desc" },
-    }),
-  ]);
-
-  return {
-    activeJob: activeJobRaw ? formatBookingForActor(activeJobRaw, actor) : null,
-    assignedUpcoming: assignedUpcomingRaw.map((r) => formatBookingForActor(r, actor)),
-    completedToday: completedTodayRaw.map((r) => formatBookingForActor(r, actor)),
-  };
-};
+export { claimNextBooking, getStaffQueue, getQueuePosition, getStaffMeJobs };
 
 /**
  * ==============================================================================
@@ -1453,48 +1046,48 @@ export const decideBookingApprovals = async ({ actor, bookingId, data }) => {
     }
   }
 
-  const pendingItems = await prisma.bookingItem.findMany({
-    where: {
-      bookingId,
-      approvalStatus: "PENDING_APPROVAL",
-    },
-  });
-
-  if (pendingItems.length === 0) {
-    throw new ConflictError(
-      "Tidak ada item tambahan yang membutuhkan persetujuan pada booking ini",
-      "NO_PENDING_ITEMS"
-    );
-  }
-
-  // Validasi keputusan: tidak boleh ada duplikasi itemId dan harus mencakup seluruh pending item
-  const decisionIds = data.decisions.map((d) => d.itemId);
-  if (new Set(decisionIds).size !== data.decisions.length) {
-    throw new BadRequestError(
-      "Terdapat duplikasi ID item dalam daftar keputusan",
-      "DUPLICATE_DECISION_ITEMS"
-    );
-  }
-
-  if (data.decisions.length !== pendingItems.length) {
-    throw new BadRequestError(
-      "Seluruh item yang menunggu persetujuan wajib diputuskan secara lengkap dalam satu permintaan",
-      "INCOMPLETE_APPROVAL_DECISIONS"
-    );
-  }
-
-  for (const d of data.decisions) {
-    const exists = pendingItems.some((p) => p.id === d.itemId);
-    if (!exists) {
-      throw new BadRequestError(
-        `Item ID ${d.itemId} tidak valid atau bukan item pending pada booking ini`,
-        "INVALID_DECISION_ITEM"
-      );
-    }
-  }
-
   const result = await prisma.$transaction(async (tx) => {
     await lockOutlet(tx, booking.outletId);
+    await lockBooking(tx, bookingId);
+    const pendingItems = await tx.bookingItem.findMany({
+      where: {
+        bookingId,
+        approvalStatus: "PENDING_APPROVAL",
+      },
+    });
+
+    if (pendingItems.length === 0) {
+      throw new ConflictError(
+        "Tidak ada item tambahan yang membutuhkan persetujuan pada booking ini",
+        "NO_PENDING_ITEMS"
+      );
+    }
+
+    // Validasi keputusan: tidak boleh ada duplikasi itemId dan harus mencakup seluruh pending item
+    const decisionIds = data.decisions.map((d) => d.itemId);
+    if (new Set(decisionIds).size !== data.decisions.length) {
+      throw new BadRequestError(
+        "Terdapat duplikasi ID item dalam daftar keputusan",
+        "DUPLICATE_DECISION_ITEMS"
+      );
+    }
+
+    if (data.decisions.length !== pendingItems.length) {
+      throw new BadRequestError(
+        "Seluruh item yang menunggu persetujuan wajib diputuskan secara lengkap dalam satu permintaan",
+        "INCOMPLETE_APPROVAL_DECISIONS"
+      );
+    }
+
+    for (const d of data.decisions) {
+      const exists = pendingItems.some((p) => p.id === d.itemId);
+      if (!exists) {
+        throw new BadRequestError(
+          `Item ID ${d.itemId} tidak valid atau bukan item pending pada booking ini`,
+          "INVALID_DECISION_ITEM"
+        );
+      }
+    }
 
     const now = new Date();
 
@@ -1570,15 +1163,12 @@ export const decideBookingApprovals = async ({ actor, bookingId, data }) => {
     });
 
     if (actor.role === "ADMIN") {
-      await tx.auditLog.create({
-        data: {
-          actorId: actor.id,
-          actorRole: actor.role,
-          action: "APPROVAL_DECISION_ON_BEHALF",
-          entity: "Booking",
-          entityId: booking.id,
-          details: { note: data.note, decisions: data.decisions },
-        },
+      await recordAuditLog(tx, {
+        actorId: actor.id,
+        action: "APPROVAL_DECISION_ON_BEHALF",
+        entity: "Booking",
+        entityId: booking.id,
+        after: { note: data.note, decisions: data.decisions },
       });
     }
 
@@ -1959,6 +1549,7 @@ export const completeBooking = async ({ actor, bookingId, note }) => {
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    await lockBooking(tx, bookingId);
     let invoiceNumber = booking.invoiceNumber;
     if (!invoiceNumber) {
       invoiceNumber = await generateInvoiceNumber(tx);
@@ -1980,7 +1571,7 @@ export const completeBooking = async ({ actor, bookingId, note }) => {
             where: {
               vehicleId: booking.vehicleId,
               serviceId: item.service.id,
-              status: { in: ["SCHEDULED", "REMINDED"] },
+              status: { in: ["SCHEDULED", "REMINDED", "DUE"] },
             },
             data: { status: "DONE" },
           });

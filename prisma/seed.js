@@ -8,7 +8,8 @@ import { z } from "zod";
 import env from "../src/config/env.js";
 import logger from "../src/config/logger.js";
 import { prisma, withDeleted, pool } from "../src/config/prisma.js";
-import { hashPassword, createQrPayload } from "../src/utils/crypto.js";
+import { hashPassword } from "../src/utils/crypto.js";
+import { generateBookingQrPayload as createQrPayload } from "../src/services/bookings.service.js";
 import { DateTime } from "luxon";
 import RULES from "../src/config/rules.js";
 
@@ -262,7 +263,7 @@ export async function seedDemoData() {
   for (const cat of categoriesData) {
     let record = await withDeleted.category.findFirst({ where: { name: cat.name } });
     if (!record) {
-      record = await prisma.category.create({ data: cat });
+      record = await prisma.category.create({ data: { name: cat.name } });
     }
     categories.push(record);
   }
@@ -473,31 +474,163 @@ export async function seedDemoData() {
 
   // G. 25 Spareparts (Beberapa stok menipis <= 5 untuk alert dashboard)
   const sparepartsData = [
-    { sku: "OLI-SHL-5W30", name: "Oli Shell Helix Ultra 5W-30 (1L)", price: 175000, stock: 24, unit: "botol" },
-    { sku: "OLI-MOT-10W40", name: "Oli Motul 7100 4T 10W-40 (1L)", price: 160000, stock: 18, unit: "botol" },
-    { sku: "OLI-TMO-0W20", name: "Oli TMO Full Synthetic 0W-20 (4L)", price: 480000, stock: 8, unit: "galon" },
-    { sku: "OLI-AHM-MPX2", name: "Oli AHM MPX-2 Matic 0.8L", price: 58000, stock: 35, unit: "botol" },
-    { sku: "OLI-GRD-012L", name: "Oli Gardan Motor Matic 120ml", price: 20000, stock: 40, unit: "botol" },
-    { sku: "FLT-OLI-AVZ", name: "Filter Oli Toyota Avanza / Xenia", price: 45000, stock: 3, unit: "pcs" }, // STOK MENIPIS (3)
-    { sku: "FLT-OLI-BRV", name: "Filter Oli Honda Brio / Jazz", price: 55000, stock: 2, unit: "pcs" },   // STOK MENIPIS (2)
-    { sku: "FLT-UDA-AVZ", name: "Filter Udara Avanza Dual VVT-i", price: 95000, stock: 12, unit: "pcs" },
-    { sku: "FLT-KAB-EXP", name: "Filter Kabin AC Expander", price: 85000, stock: 4, unit: "pcs" },        // STOK MENIPIS (4)
-    { sku: "BUS-NGK-CR7E", name: "Busi NGK CR7E Standard Motor", price: 25000, stock: 30, unit: "pcs" },
-    { sku: "BUS-DEN-IRID", name: "Busi Denso Iridium Power Mobil", price: 110000, stock: 16, unit: "pcs" },
-    { sku: "KMP-REM-AVZF", name: "Kampas Rem Depan Avanza", price: 210000, stock: 5, unit: "set" },      // STOK MENIPIS (5)
-    { sku: "KMP-REM-VARF", name: "Kampas Rem Depan Vario 150", price: 65000, stock: 22, unit: "set" },
-    { sku: "RAD-CLT-PREM", name: "Prestone Radiator Coolant 4L", price: 120000, stock: 15, unit: "galon" },
-    { sku: "BRK-FLD-DOT4", name: "Minyak Rem DOT 4 Jumbo 300ml", price: 38000, stock: 25, unit: "botol" },
-    { sku: "AKI-GS-MF-34", name: "Aki GS Astra Maintenance Free 34B19R", price: 850000, stock: 6, unit: "unit" },
+    {
+      sku: "OLI-SHL-5W30",
+      name: "Oli Shell Helix Ultra 5W-30 (1L)",
+      price: 175000,
+      stock: 24,
+      unit: "botol",
+    },
+    {
+      sku: "OLI-MOT-10W40",
+      name: "Oli Motul 7100 4T 10W-40 (1L)",
+      price: 160000,
+      stock: 18,
+      unit: "botol",
+    },
+    {
+      sku: "OLI-TMO-0W20",
+      name: "Oli TMO Full Synthetic 0W-20 (4L)",
+      price: 480000,
+      stock: 8,
+      unit: "galon",
+    },
+    {
+      sku: "OLI-AHM-MPX2",
+      name: "Oli AHM MPX-2 Matic 0.8L",
+      price: 58000,
+      stock: 35,
+      unit: "botol",
+    },
+    {
+      sku: "OLI-GRD-012L",
+      name: "Oli Gardan Motor Matic 120ml",
+      price: 20000,
+      stock: 40,
+      unit: "botol",
+    },
+    {
+      sku: "FLT-OLI-AVZ",
+      name: "Filter Oli Toyota Avanza / Xenia",
+      price: 45000,
+      stock: 3,
+      unit: "pcs",
+    }, // STOK MENIPIS (3)
+    {
+      sku: "FLT-OLI-BRV",
+      name: "Filter Oli Honda Brio / Jazz",
+      price: 55000,
+      stock: 2,
+      unit: "pcs",
+    }, // STOK MENIPIS (2)
+    {
+      sku: "FLT-UDA-AVZ",
+      name: "Filter Udara Avanza Dual VVT-i",
+      price: 95000,
+      stock: 12,
+      unit: "pcs",
+    },
+    { sku: "FLT-KAB-EXP", name: "Filter Kabin AC Expander", price: 85000, stock: 4, unit: "pcs" }, // STOK MENIPIS (4)
+    {
+      sku: "BUS-NGK-CR7E",
+      name: "Busi NGK CR7E Standard Motor",
+      price: 25000,
+      stock: 30,
+      unit: "pcs",
+    },
+    {
+      sku: "BUS-DEN-IRID",
+      name: "Busi Denso Iridium Power Mobil",
+      price: 110000,
+      stock: 16,
+      unit: "pcs",
+    },
+    { sku: "KMP-REM-AVZF", name: "Kampas Rem Depan Avanza", price: 210000, stock: 5, unit: "set" }, // STOK MENIPIS (5)
+    {
+      sku: "KMP-REM-VARF",
+      name: "Kampas Rem Depan Vario 150",
+      price: 65000,
+      stock: 22,
+      unit: "set",
+    },
+    {
+      sku: "RAD-CLT-PREM",
+      name: "Prestone Radiator Coolant 4L",
+      price: 120000,
+      stock: 15,
+      unit: "galon",
+    },
+    {
+      sku: "BRK-FLD-DOT4",
+      name: "Minyak Rem DOT 4 Jumbo 300ml",
+      price: 38000,
+      stock: 25,
+      unit: "botol",
+    },
+    {
+      sku: "AKI-GS-MF-34",
+      name: "Aki GS Astra Maintenance Free 34B19R",
+      price: 850000,
+      stock: 6,
+      unit: "unit",
+    },
     { sku: "AKI-YUS-GTZ5", name: "Aki Yuasa GTZ-5S Motor", price: 240000, stock: 14, unit: "unit" },
-    { sku: "WIP-BOS-20IN", name: "Wiper Bosch Advantage 20 Inchi", price: 65000, stock: 10, unit: "pcs" },
-    { sku: "WIP-BOS-16IN", name: "Wiper Bosch Advantage 16 Inchi", price: 55000, stock: 10, unit: "pcs" },
-    { sku: "BEL-GTS-VAR1", name: "V-Belt Gates Honda Vario 125/150", price: 135000, stock: 12, unit: "pcs" },
-    { sku: "ROL-BRT-VAR1", name: "Roller BRT Racing Vario 11 Gram", price: 95000, stock: 8, unit: "set" },
-    { sku: "MIN-STP-PWR", name: "Minyak Power Steering STP 354ml", price: 48000, stock: 15, unit: "botol" },
-    { sku: "CLN-THB-WUR", name: "Wurth Throttle Body Cleaner 500ml", price: 85000, stock: 18, unit: "kaleng" },
-    { sku: "BAN-MIC-185", name: "Ban Michelin Energy XM2+ 185/65 R15", price: 950000, stock: 8, unit: "pcs" },
-    { sku: "BAN-IRC-9090", name: "Ban Tubeless IRC Exato 90/90-14", price: 235000, stock: 14, unit: "pcs" },
+    {
+      sku: "WIP-BOS-20IN",
+      name: "Wiper Bosch Advantage 20 Inchi",
+      price: 65000,
+      stock: 10,
+      unit: "pcs",
+    },
+    {
+      sku: "WIP-BOS-16IN",
+      name: "Wiper Bosch Advantage 16 Inchi",
+      price: 55000,
+      stock: 10,
+      unit: "pcs",
+    },
+    {
+      sku: "BEL-GTS-VAR1",
+      name: "V-Belt Gates Honda Vario 125/150",
+      price: 135000,
+      stock: 12,
+      unit: "pcs",
+    },
+    {
+      sku: "ROL-BRT-VAR1",
+      name: "Roller BRT Racing Vario 11 Gram",
+      price: 95000,
+      stock: 8,
+      unit: "set",
+    },
+    {
+      sku: "MIN-STP-PWR",
+      name: "Minyak Power Steering STP 354ml",
+      price: 48000,
+      stock: 15,
+      unit: "botol",
+    },
+    {
+      sku: "CLN-THB-WUR",
+      name: "Wurth Throttle Body Cleaner 500ml",
+      price: 85000,
+      stock: 18,
+      unit: "kaleng",
+    },
+    {
+      sku: "BAN-MIC-185",
+      name: "Ban Michelin Energy XM2+ 185/65 R15",
+      price: 950000,
+      stock: 8,
+      unit: "pcs",
+    },
+    {
+      sku: "BAN-IRC-9090",
+      name: "Ban Tubeless IRC Exato 90/90-14",
+      price: 235000,
+      stock: 14,
+      unit: "pcs",
+    },
   ];
 
   const spareparts = [];
@@ -511,12 +644,66 @@ export async function seedDemoData() {
 
   // H. Kendaraan Customer (Mobil & Motor)
   const vehiclesData = [
-    { userId: customers[0].id, plateNumber: "B1234FAD", brand: "Toyota", model: "Avanza Veloz", type: "CAR", year: 2021, color: "Hitam Metalik", lastOdometerKm: 34500 },
-    { userId: customers[1].id, plateNumber: "B5678BDS", brand: "Honda", model: "HR-V 1.5", type: "CAR", year: 2022, color: "Putih Mutiara", lastOdometerKm: 21000 },
-    { userId: customers[2].id, plateNumber: "B9988CTL", brand: "Honda", model: "Vario 160", type: "MOTORCYCLE", year: 2023, color: "Merah Doff", lastOdometerKm: 8500 },
-    { userId: customers[3].id, plateNumber: "B4321DWA", brand: "Mitsubishi", model: "Xpander Ultimate", type: "CAR", year: 2020, color: "Abu-abu", lastOdometerKm: 48000 },
-    { userId: customers[4].id, plateNumber: "B7711EKO", brand: "Yamaha", model: "NMAX 155", type: "MOTORCYCLE", year: 2022, color: "Biru", lastOdometerKm: 14200 },
-    { userId: customers[5].id, plateNumber: "B3399FJR", brand: "Suzuki", model: "Ertiga GL", type: "CAR", year: 2019, color: "Silver", lastOdometerKm: 62000 },
+    {
+      userId: customers[0].id,
+      plateNumber: "B1234FAD",
+      brand: "Toyota",
+      model: "Avanza Veloz",
+      type: "CAR",
+      year: 2021,
+      color: "Hitam Metalik",
+      lastOdometerKm: 34500,
+    },
+    {
+      userId: customers[1].id,
+      plateNumber: "B5678BDS",
+      brand: "Honda",
+      model: "HR-V 1.5",
+      type: "CAR",
+      year: 2022,
+      color: "Putih Mutiara",
+      lastOdometerKm: 21000,
+    },
+    {
+      userId: customers[2].id,
+      plateNumber: "B9988CTL",
+      brand: "Honda",
+      model: "Vario 160",
+      type: "MOTORCYCLE",
+      year: 2023,
+      color: "Merah Doff",
+      lastOdometerKm: 8500,
+    },
+    {
+      userId: customers[3].id,
+      plateNumber: "B4321DWA",
+      brand: "Mitsubishi",
+      model: "Xpander Ultimate",
+      type: "CAR",
+      year: 2020,
+      color: "Abu-abu",
+      lastOdometerKm: 48000,
+    },
+    {
+      userId: customers[4].id,
+      plateNumber: "B7711EKO",
+      brand: "Yamaha",
+      model: "NMAX 155",
+      type: "MOTORCYCLE",
+      year: 2022,
+      color: "Biru",
+      lastOdometerKm: 14200,
+    },
+    {
+      userId: customers[5].id,
+      plateNumber: "B3399FJR",
+      brand: "Suzuki",
+      model: "Ertiga GL",
+      type: "CAR",
+      year: 2019,
+      color: "Silver",
+      lastOdometerKm: 62000,
+    },
   ];
 
   const vehicles = [];
@@ -912,7 +1099,8 @@ export async function seedDemoData() {
         outletId: outletTimur.id,
         mechanicId: mechanics[2].id,
         rating: 5,
-        comment: "Pelayanan sangat memuaskan, ruang mesin bersih kembali dan tarikan mobil lebih enteng!",
+        comment:
+          "Pelayanan sangat memuaskan, ruang mesin bersih kembali dan tarikan mobil lebih enteng!",
         isHidden: false,
       },
     });
@@ -974,8 +1162,8 @@ export async function seedDemoData() {
       data: {
         vehicleId: vehicles[0].id,
         serviceId: services[0].id,
-        lastServiceDate: now.minus({ days: 185 }).toJSDate(),
-        lastOdometerKm: 24500,
+        userId: customers[0].id,
+        sourceBookingId: bookingCompletedCash.id,
         dueOdometerKm: 34500,
         dueDate: now.minus({ days: 5 }).toJSDate(), // Sudah jatuh tempo 5 hari lalu
         status: "DUE",
@@ -994,8 +1182,8 @@ export async function seedDemoData() {
       data: {
         vehicleId: vehicles[1].id,
         serviceId: services[4].id,
-        lastServiceDate: now.minus({ days: 30 }).toJSDate(),
-        lastOdometerKm: 20000,
+        userId: customers[1].id,
+        sourceBookingId: bookingCompletedMidtrans.id,
         dueOdometerKm: 40000,
         dueDate: now.plus({ days: 150 }).toJSDate(),
         status: "SCHEDULED",
@@ -1031,9 +1219,15 @@ async function main() {
     const result = await seedDemoData();
 
     console.log("✅ Seeding master data dan transaksi demo selesai dengan sukses!\n");
-    console.log("--------------------------------------------------------------------------------------------------");
-    console.log("                                 DAFTAR AKUN DEMO RESMI                                           ");
-    console.log("--------------------------------------------------------------------------------------------------");
+    console.log(
+      "--------------------------------------------------------------------------------------------------"
+    );
+    console.log(
+      "                                 DAFTAR AKUN DEMO RESMI                                           "
+    );
+    console.log(
+      "--------------------------------------------------------------------------------------------------"
+    );
     console.table([
       {
         Role: "ADMIN",
@@ -1079,12 +1273,20 @@ async function main() {
       },
     ]);
 
-    console.log("\n--------------------------------------------------------------------------------------------------");
-    console.log("                                CONTOH QR CODE CHECK-IN DEMO                                      ");
-    console.log("--------------------------------------------------------------------------------------------------");
+    console.log(
+      "\n--------------------------------------------------------------------------------------------------"
+    );
+    console.log(
+      "                                CONTOH QR CODE CHECK-IN DEMO                                      "
+    );
+    console.log(
+      "--------------------------------------------------------------------------------------------------"
+    );
     console.log("Payload QR Scan untuk Check-in Booking PENDING:");
     console.log(result.qrDemo);
-    console.log("--------------------------------------------------------------------------------------------------\n");
+    console.log(
+      "--------------------------------------------------------------------------------------------------\n"
+    );
   } finally {
     await prisma.$disconnect();
     await pool.end();

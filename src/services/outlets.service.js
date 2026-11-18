@@ -12,6 +12,7 @@ export const publicOutletSelect = {
   name: true,
   address: true,
   phone: true,
+  managerName: true,
   latitude: true,
   longitude: true,
   openDays: true,
@@ -113,6 +114,7 @@ export const createOutlet = async ({ actor, data, ip }) => {
         name: data.name,
         address: data.address,
         phone: data.phone ?? null,
+        managerName: data.managerName ?? null,
         latitude: data.latitude,
         longitude: data.longitude,
         openDays: data.openDays,
@@ -187,14 +189,12 @@ export const softDeleteOutlet = async ({ actor, outletId, ip }) => {
       throw new NotFoundError("Outlet tidak ditemukan", "OUTLET_NOT_FOUND");
     }
 
-    const [activeBookingCount, activeMechanicCount] = await Promise.all([
-      tx.booking.count({
-        where: { outletId, status: { in: RULES.ACTIVE_BOOKING_STATUSES } },
-      }),
-      tx.user.count({
-        where: { outletId, role: "MECHANIC", isActive: true },
-      }),
-    ]);
+    const activeBookingCount = await tx.booking.count({
+      where: { outletId, status: { in: RULES.ACTIVE_BOOKING_STATUSES } },
+    });
+    const activeMechanicCount = await tx.user.count({
+      where: { outletId, role: "MECHANIC", isActive: true },
+    });
 
     if (activeBookingCount > 0) {
       throw new ConflictError(

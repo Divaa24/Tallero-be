@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import jwt from "jsonwebtoken";
+import { signAccessToken } from "../../src/utils/jwt.js";
 import env from "../../src/config/env.js";
 import { handleSocketConnection, socketAuthMiddleware } from "../../src/config/socket.js";
 import { emitRealtimeEvent, setSocketIoInstance } from "../../src/services/realtime.service.js";
@@ -25,6 +26,9 @@ vi.mock("../../src/config/prisma.js", () => {
     default: mockProxy,
     prisma: mockProxy,
     lockOutlet: async () => {},
+    lockCustomer: vi.fn(),
+    lockBooking: vi.fn(),
+    lockInvoices: vi.fn(),
   };
 });
 
@@ -128,10 +132,23 @@ describe("Fase 5 Socket.IO Handshake Auth & Realtime Room Isolation", () => {
     expect(capturedErr.data?.code).toBe("INVALID_TOKEN");
   });
 
+  it.each([undefined, "bad", "0", "-1", "1.5"])(
+    "menolak subject JWT tidak valid %s sebelum query database",
+    async (sub) => {
+      const token = jwt.sign(
+        { ...(sub === undefined ? {} : { sub }), role: "ADMIN", tokenVersion: 1 },
+        env.JWT_SECRET,
+        { algorithm: "HS256" }
+      );
+      const next = vi.fn();
+      await socketAuthMiddleware({ handshake: { auth: { token } } }, next);
+      expect(next.mock.calls[0][0].data.code).toBe("INVALID_TOKEN");
+      expect(storeRef.current.user.findUnique).not.toHaveBeenCalled();
+    }
+  );
+
   it("menolak koneksi socket untuk user yang dinonaktifkan (ACCOUNT_INACTIVE)", async () => {
-    const token = jwt.sign({ userId: 99, role: "CUSTOMER", tokenVersion: 1 }, env.JWT_SECRET, {
-      algorithm: "HS256",
-    });
+    const token = signAccessToken({ userId: 99, role: "CUSTOMER", tokenVersion: 1 });
 
     const socket = {
       handshake: { auth: { token } },
@@ -148,9 +165,7 @@ describe("Fase 5 Socket.IO Handshake Auth & Realtime Room Isolation", () => {
 
   it("menolak koneksi socket untuk user dengan tokenVersion lama / telah dicabut (TOKEN_REVOKED)", async () => {
     // Token berisi tokenVersion 0, sedangkan di database tokenVersion adalah 1
-    const token = jwt.sign({ userId: 10, role: "CUSTOMER", tokenVersion: 0 }, env.JWT_SECRET, {
-      algorithm: "HS256",
-    });
+    const token = signAccessToken({ userId: 10, role: "CUSTOMER", tokenVersion: 0 });
 
     const socket = {
       handshake: { auth: { token } },
@@ -167,11 +182,7 @@ describe("Fase 5 Socket.IO Handshake Auth & Realtime Room Isolation", () => {
 
   it("menerima koneksi socket terautentikasi dan mengisolasi room per role (Customer, Mekanik, Admin)", async () => {
     // 1. Customer
-    const customerToken = jwt.sign(
-      { userId: 10, role: "CUSTOMER", tokenVersion: 1 },
-      env.JWT_SECRET,
-      { algorithm: "HS256" }
-    );
+    const customerToken = signAccessToken({ userId: 10, role: "CUSTOMER", tokenVersion: 1 });
     const customerSocket = {
       handshake: { auth: { token: customerToken } },
       joinedRooms: new Set(),
@@ -194,11 +205,7 @@ describe("Fase 5 Socket.IO Handshake Auth & Realtime Room Isolation", () => {
     expect(customerSocket.joinedRooms.has("outlet:1:staff")).toBe(false);
 
     // 2. Mekanik
-    const mechanicToken = jwt.sign(
-      { userId: 20, role: "MECHANIC", tokenVersion: 1 },
-      env.JWT_SECRET,
-      { algorithm: "HS256" }
-    );
+    const mechanicToken = signAccessToken({ userId: 20, role: "MECHANIC", tokenVersion: 1 });
     const mechanicSocket = {
       handshake: { auth: { token: mechanicToken } },
       joinedRooms: new Set(),
@@ -217,9 +224,7 @@ describe("Fase 5 Socket.IO Handshake Auth & Realtime Room Isolation", () => {
     expect(mechanicSocket.joinedRooms.has("admin")).toBe(false);
 
     // 3. Admin
-    const adminToken = jwt.sign({ userId: 1, role: "ADMIN", tokenVersion: 1 }, env.JWT_SECRET, {
-      algorithm: "HS256",
-    });
+    const adminToken = signAccessToken({ userId: 1, role: "ADMIN", tokenVersion: 1 });
     const adminSocket = {
       handshake: { auth: { token: adminToken } },
       joinedRooms: new Set(),

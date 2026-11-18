@@ -259,14 +259,12 @@ export const transition = async (tx, bookingId, toStatus, actor, opts = {}) => {
     }
 
     // Guard foto inspeksi: minimal 1 BEFORE dan 1 AFTER
-    const [beforePhotoCount, afterPhotoCount] = await Promise.all([
-      tx.bookingPhoto.count({
-        where: { bookingId, type: "BEFORE", deletedAt: null },
-      }),
-      tx.bookingPhoto.count({
-        where: { bookingId, type: "AFTER", deletedAt: null },
-      }),
-    ]);
+    const beforePhotoCount = await tx.bookingPhoto.count({
+      where: { bookingId, type: "BEFORE", deletedAt: null },
+    });
+    const afterPhotoCount = await tx.bookingPhoto.count({
+      where: { bookingId, type: "AFTER", deletedAt: null },
+    });
 
     if (beforePhotoCount === 0 || afterPhotoCount === 0) {
       throw new BusinessRuleError(

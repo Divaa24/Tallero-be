@@ -1,7 +1,8 @@
+import { resetTestDb } from "../helpers/db.js";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import app from "../../src/app.js";
-import prisma, { withDeleted } from "../../src/config/prisma.js";
+import prisma from "../../src/config/prisma.js";
 import * as mailService from "../../src/services/mail.service.js";
 import { hashPassword } from "../../src/utils/crypto.js";
 import { signAccessToken } from "../../src/utils/jwt.js";
@@ -19,28 +20,25 @@ describe("Fase 3 Master Data & Vehicles Integration", () => {
   let customerAToken;
   let customerBToken;
   let mechanicToken;
+  let dbReady = false;
 
   beforeAll(async () => {
-    await prisma.$connect();
+    try {
+      await prisma.$connect();
+      await prisma.$queryRaw`SELECT 1`;
+      dbReady = true;
+    } catch (error) {
+      dbReady = false;
+      throw error;
+    }
   });
 
   beforeEach(async () => {
+    if (!dbReady) return;
     vi.restoreAllMocks();
     vi.spyOn(mailService, "sendMail").mockResolvedValue({ accepted: ["test"], driver: "console" });
 
-    await withDeleted.$transaction([
-      withDeleted.auditLog.deleteMany({}),
-      withDeleted.bookingItem.deleteMany({}),
-      withDeleted.booking.deleteMany({}),
-      withDeleted.vehicle.deleteMany({}),
-      withDeleted.sparepart.deleteMany({}),
-      withDeleted.service.deleteMany({}),
-      withDeleted.category.deleteMany({}),
-      withDeleted.outletClosure.deleteMany({}),
-      withDeleted.refreshToken.deleteMany({}),
-      withDeleted.user.deleteMany({}),
-      withDeleted.outlet.deleteMany({}),
-    ]);
+    await resetTestDb();
 
     const passwordHash = await hashPassword("Password123");
 
@@ -118,6 +116,7 @@ describe("Fase 3 Master Data & Vehicles Integration", () => {
   });
 
   it("enforces vehicle IDOR 404, plate uniqueness, and plate reuse after soft delete", async () => {
+    if (!dbReady) return;
     const createRes = await request(app)
       .post("/api/v1/vehicles")
       .set("Authorization", `Bearer ${customerAToken}`)
@@ -171,6 +170,7 @@ describe("Fase 3 Master Data & Vehicles Integration", () => {
   });
 
   it("keeps BookingItem snapshot price isolated when service price updates and logs audit", async () => {
+    if (!dbReady) return;
     const catRes = await request(app)
       .post("/api/v1/admin/categories")
       .set("Authorization", `Bearer ${adminToken}`)
@@ -256,6 +256,7 @@ describe("Fase 3 Master Data & Vehicles Integration", () => {
   });
 
   it("masks sparepart numeric stock from customers, blocks admin self-delete, and audits staff adjustments", async () => {
+    if (!dbReady) return;
     const partRes = await request(app)
       .post("/api/v1/admin/spareparts")
       .set("Authorization", `Bearer ${adminToken}`)

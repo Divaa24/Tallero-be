@@ -221,6 +221,7 @@ model Outlet {
   name         String    @db.VarChar(100)
   address      String    @db.Text
   phone        String?   @db.VarChar(30)
+  managerName  String?   @map("manager_name") @db.VarChar(100)
   latitude     Float
   longitude    Float
   openDays     Json      @map("open_days")
@@ -274,6 +275,9 @@ model Service {
   category             Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   name                 String       @db.VarChar(100)
   description          String?      @db.Text
+  badge                String?      @db.VarChar(50)
+  imageUrl             String?      @map("image_url") @db.VarChar(500)
+  checklist            Json?
   price                Int
   estimatedMinutes     Int          @map("estimated_minutes")
   vehicleType          VehicleType? @map("vehicle_type")

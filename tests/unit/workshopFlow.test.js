@@ -21,6 +21,9 @@ vi.mock("../../src/config/prisma.js", () => {
     default: mockProxy,
     prisma: mockProxy,
     lockOutlet: async () => {},
+    lockCustomer: vi.fn(),
+    lockBooking: vi.fn(),
+    lockInvoices: vi.fn(),
   };
 });
 
@@ -202,6 +205,7 @@ describe("Fase 5 Workshop Flow & Queue Tests", () => {
         slotCapacity: 2,
         openDays: [1, 2, 3, 4, 5, 6],
         isActive: true,
+        isVerified: true,
         deletedAt: null,
       },
       // Outlet 2 (Bandung)
@@ -215,6 +219,7 @@ describe("Fase 5 Workshop Flow & Queue Tests", () => {
         slotCapacity: 2,
         openDays: [1, 2, 3, 4, 5, 6],
         isActive: true,
+        isVerified: true,
         deletedAt: null,
       }
     );
@@ -228,6 +233,7 @@ describe("Fase 5 Workshop Flow & Queue Tests", () => {
         phone: "+6281234567890",
         role: "CUSTOMER",
         isActive: true,
+        isVerified: true,
         deletedAt: null,
       },
       {
@@ -237,6 +243,7 @@ describe("Fase 5 Workshop Flow & Queue Tests", () => {
         role: "MECHANIC",
         outletId: 1,
         isActive: true,
+        isVerified: true,
         deletedAt: null,
       },
       {
@@ -246,6 +253,7 @@ describe("Fase 5 Workshop Flow & Queue Tests", () => {
         role: "MECHANIC",
         outletId: 1,
         isActive: true,
+        isVerified: true,
         deletedAt: null,
       },
       {
@@ -255,6 +263,7 @@ describe("Fase 5 Workshop Flow & Queue Tests", () => {
         role: "MECHANIC",
         outletId: 2,
         isActive: true,
+        isVerified: true,
         deletedAt: null,
       },
       {
@@ -263,6 +272,7 @@ describe("Fase 5 Workshop Flow & Queue Tests", () => {
         email: "admin@tallero.id",
         role: "ADMIN",
         isActive: true,
+        isVerified: true,
         deletedAt: null,
       }
     );

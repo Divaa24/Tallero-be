@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import authRouter from "../src/routes/auth.routes.js";
 import filesRouter from "../src/routes/files.routes.js";
+import availabilityRouter from "../src/routes/availability.routes.js";
 import adminUsersRouter from "../src/routes/users.routes.js";
 import { adminOutletsRouter, publicOutletsRouter } from "../src/routes/outlets.routes.js";
 import {
@@ -30,6 +31,7 @@ export const getMountedRoutes = () => {
   const mounts = [
     { prefix: "/api/v1/auth", router: authRouter },
     { prefix: "/api/v1/files", router: filesRouter },
+    { prefix: "/api/v1/outlets", router: availabilityRouter },
     { prefix: "/api/v1/outlets", router: publicOutletsRouter },
     { prefix: "/api/v1/categories", router: publicCategoriesRouter },
     { prefix: "/api/v1/services", router: publicServicesRouter },

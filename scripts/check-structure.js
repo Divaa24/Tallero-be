@@ -135,6 +135,13 @@ export const checkProjectStructure = (rootDir = process.cwd()) => {
       }
     }
 
+    // Cek bahwa seluruh file di src/services/ wajib berakhiran .service.js (AGENTS.md §2)
+    if (topLayer === "services" && !filename.endsWith(".service.js")) {
+      errors.push(
+        `File di src/services/ wajib berakhiran .service.js (AGENTS.md §2, ditemukan: ${relPath})`
+      );
+    }
+
     // Cek kata/suffix nama terlarang
     if (!WHITELISTED_HANDLER_PATHS.has(relPath)) {
       const tokens = tokenizeFilename(filename);

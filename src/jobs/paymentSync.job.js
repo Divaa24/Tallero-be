@@ -21,10 +21,7 @@ export const runPaymentSync = async () => {
     where: {
       method: "MIDTRANS",
       status: "PENDING",
-      OR: [
-        { expiresAt: { gt: now } },
-        { expiresAt: null, createdAt: { gt: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
-      ],
+      createdAt: { gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) },
     },
     take: 50,
     orderBy: { createdAt: "asc" },

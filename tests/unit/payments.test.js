@@ -31,6 +31,9 @@ vi.mock("../../src/config/prisma.js", () => {
     default: mockProxy,
     prisma: mockProxy,
     lockOutlet: async () => {},
+    lockCustomer: vi.fn(),
+    lockBooking: vi.fn(),
+    lockInvoices: vi.fn(),
   };
 });
 
@@ -879,6 +882,34 @@ describe("Fase 7: Pembayaran Midtrans Snap, Webhook, Tips, Kasir & Faktur PDF", 
   // ============================================================================
   // 12. BACKGROUND CRON PAYMENT SYNC
   // ============================================================================
+  it("sync menjaga Snap pending ketika metode belum dipilih dan Core mengirim HTTP 200/code 404", async () => {
+    const payment = await mockStore.payment.create({
+      data: {
+        bookingId: readyBooking.id,
+        type: "INVOICE",
+        method: "MIDTRANS",
+        orderId: `${readyBooking.code}-UNSELECTED`,
+        amount: 150000,
+        status: "PENDING",
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ status_code: "404", status_message: "Transaction doesn't exist" }),
+      }))
+    );
+    const result = await paymentsService.syncPaymentStatus({
+      actor: adminUser,
+      orderId: payment.orderId,
+    });
+    expect(result.status).toBe("PENDING");
+    expect(readyBooking.paymentStatus).toBe("UNPAID");
+    expect(mockStore._tables.auditLog).toHaveLength(0);
+  });
+
   it("cron paymentSync: memproses sinkronisasi pembayaran pending aktif", async () => {
     const pendingPayment = await mockStore.payment.create({
       data: {

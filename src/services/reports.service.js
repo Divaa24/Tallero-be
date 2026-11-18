@@ -7,19 +7,14 @@ import prisma from "../config/prisma.js";
 import { DateTime } from "luxon";
 import RULES from "../config/rules.js";
 import { recordAuditLog } from "./audit.service.js";
-import {
-  exportToCsv,
-  exportToXlsx,
-  exportToPdf,
-  sanitizeCell,
-} from "./reportExporters.js";
+import { exportToCsv, exportToXlsx, exportToPdf, sanitizeCell } from "./reportExporters.service.js";
 import {
   fetchRevenueDataset,
   fetchBookingsDataset,
   fetchMechanicsDataset,
   fetchServicesDataset,
   fetchStockDataset,
-} from "./reportDatasets.js";
+} from "./reportDatasets.service.js";
 
 const calcGrowth = (current, previous) => {
   if (!previous || previous === 0) {
@@ -41,7 +36,7 @@ const getPeriodRevenue = async ({ start, end, outletId }) => {
       where: {
         ...whereBase,
         type: "INVOICE",
-        status: "PAID",
+        status: { in: ["PAID", "REFUNDED"] },
         paidAt: { gte: start, lte: end },
       },
       _sum: { amount: true },
@@ -130,13 +125,7 @@ export const getDashboardMetrics = async ({ outletId }) => {
     prisma.booking.count({
       where: {
         status: {
-          in: [
-            "PENDING",
-            "CHECKED_IN",
-            "IN_PROGRESS",
-            "WAITING_APPROVAL",
-            "READY_FOR_PICKUP",
-          ],
+          in: ["PENDING", "CHECKED_IN", "IN_PROGRESS", "WAITING_APPROVAL", "READY_FOR_PICKUP"],
         },
         ...(outletId ? { outletId } : {}),
       },
@@ -261,8 +250,7 @@ export const getDashboardMetrics = async ({ outletId }) => {
   }
 
   const avgWaitMinutes = waitCount > 0 ? Math.round(totalWaitMinutes / waitCount) : 0;
-  const avgServiceMinutes =
-    serviceCount > 0 ? Math.round(totalServiceMinutes / serviceCount) : 0;
+  const avgServiceMinutes = serviceCount > 0 ? Math.round(totalServiceMinutes / serviceCount) : 0;
 
   // Leaderboard mekanik
   const mechanicLeaderboard = await Promise.all(
@@ -295,9 +283,7 @@ export const getDashboardMetrics = async ({ outletId }) => {
         name: m.name,
         outlet: m.outlet,
         completedJobs,
-        averageRating: reviewAgg._avg.rating
-          ? Number(reviewAgg._avg.rating.toFixed(1))
-          : 0,
+        averageRating: reviewAgg._avg.rating ? Number(reviewAgg._avg.rating.toFixed(1)) : 0,
         reviewsCount: reviewAgg._count.id,
         totalTips: tipAgg._sum.amount || 0,
       };
@@ -362,14 +348,8 @@ export const getDashboardMetrics = async ({ outletId }) => {
  * Ringkasan laporan operasional dan finansial untuk rentang tanggal tertentu.
  */
 export const getReportsSummary = async ({ from, to, outletId }) => {
-  const start = DateTime.fromISO(from, { zone: RULES.TIMEZONE })
-    .startOf("day")
-    .toUTC()
-    .toJSDate();
-  const end = DateTime.fromISO(to, { zone: RULES.TIMEZONE })
-    .endOf("day")
-    .toUTC()
-    .toJSDate();
+  const start = DateTime.fromISO(from, { zone: RULES.TIMEZONE }).startOf("day").toUTC().toJSDate();
+  const end = DateTime.fromISO(to, { zone: RULES.TIMEZONE }).endOf("day").toUTC().toJSDate();
 
   const [rev, statusAgg, completedCount, totalBookings] = await Promise.all([
     getPeriodRevenue({ start, end, outletId }),
@@ -401,8 +381,7 @@ export const getReportsSummary = async ({ from, to, outletId }) => {
     statusDistribution[row.status] = row._count.id;
   }
 
-  const avgBookingValue =
-    completedCount > 0 ? Math.round(rev.net / completedCount) : 0;
+  const avgBookingValue = completedCount > 0 ? Math.round(rev.net / completedCount) : 0;
 
   return {
     dateRange: { from, to },
@@ -419,24 +398,9 @@ export const getReportsSummary = async ({ from, to, outletId }) => {
 /**
  * Ekspor dataset laporan ke CSV, XLSX, atau PDF.
  */
-export const exportReport = async ({
-  type,
-  format,
-  from,
-  to,
-  outletId,
-  res,
-  actor,
-  ip,
-}) => {
-  const start = DateTime.fromISO(from, { zone: RULES.TIMEZONE })
-    .startOf("day")
-    .toUTC()
-    .toJSDate();
-  const end = DateTime.fromISO(to, { zone: RULES.TIMEZONE })
-    .endOf("day")
-    .toUTC()
-    .toJSDate();
+export const exportReport = async ({ type, format, from, to, outletId, res, actor, ip }) => {
+  const start = DateTime.fromISO(from, { zone: RULES.TIMEZONE }).startOf("day").toUTC().toJSDate();
+  const end = DateTime.fromISO(to, { zone: RULES.TIMEZONE }).endOf("day").toUTC().toJSDate();
 
   let headers = [];
   let rows = [];

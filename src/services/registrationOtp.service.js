@@ -4,7 +4,7 @@ import RULES from "../config/rules.js";
 import { generateNumericOtp, hashPassword, hmacSha256, safeCompare } from "../utils/crypto.js";
 import { BadRequestError, TooManyRequestsError } from "../utils/errors.js";
 import { buildRegistrationOtpEmail, sendMail } from "./mail.service.js";
-import { issueSessionTokens } from "./sessionTokens.js";
+import { issueSessionTokens } from "./sessionTokens.service.js";
 import { formatUserDto, publicUserSelect } from "./auth.service.js";
 
 const REGISTER_GENERIC_MESSAGE =
@@ -164,13 +164,15 @@ export const verifyOtp = async ({ email, code, meta = {} }) => {
 
   const submittedHash = hmacSha256(code, env.OTP_HMAC_SECRET);
   if (!safeCompare(submittedHash, otpRecord.codeHash)) {
-    const nextAttempts = otpRecord.attempts + 1;
-    await prisma.registrationOtp.update({
-      where: { id: otpRecord.id },
-      data: {
-        attempts: nextAttempts,
-        ...(nextAttempts >= RULES.OTP_MAX_ATTEMPTS ? { consumedAt: now } : {}),
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.registrationOtp.updateMany({
+        where: { id: otpRecord.id, consumedAt: null, attempts: { lt: RULES.OTP_MAX_ATTEMPTS } },
+        data: { attempts: { increment: 1 } },
+      });
+      await tx.registrationOtp.updateMany({
+        where: { id: otpRecord.id, consumedAt: null, attempts: { gte: RULES.OTP_MAX_ATTEMPTS } },
+        data: { consumedAt: now },
+      });
     });
     throw new BadRequestError("Kode OTP tidak valid atau sudah kedaluwarsa", "INVALID_OTP");
   }

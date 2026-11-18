@@ -13,8 +13,8 @@ export const resetTestDb = async () => {
   await withDeleted.bookingPhoto.deleteMany({});
   await withDeleted.bookingItem.deleteMany({});
   await withDeleted.bookingLog.deleteMany({});
-  await withDeleted.booking.deleteMany({});
   await withDeleted.serviceReminder.deleteMany({});
+  await withDeleted.booking.deleteMany({});
   await withDeleted.vehicle.deleteMany({});
   await withDeleted.service.deleteMany({});
   await withDeleted.category.deleteMany({});
@@ -28,4 +28,3 @@ export const resetTestDb = async () => {
 };
 
 export default { resetTestDb };
-

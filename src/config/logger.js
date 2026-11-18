@@ -26,7 +26,7 @@ const redactOptions = {
 };
 
 export const logger = pino({
-  level: env.NODE_ENV === "test" ? "silent" : env.NODE_ENV === "production" ? "info" : "debug",
+  level: env.NODE_ENV === "test" ? "silent" : env.LOG_LEVEL,
   redact: redactOptions,
   transport:
     env.NODE_ENV !== "production" && env.NODE_ENV !== "test"

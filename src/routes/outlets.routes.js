@@ -2,8 +2,6 @@ import { Router } from "express";
 import authenticate from "../middlewares/authenticate.js";
 import authorize from "../middlewares/authorize.js";
 import validate from "../middlewares/validate.js";
-import { availabilityRateLimiter } from "../middlewares/rateLimit.js";
-import { outletAvailabilitySchema } from "../validations/bookings.validation.js";
 import {
   createOutletClosureSchema,
   createOutletSchema,
@@ -23,17 +21,10 @@ publicOutletsRouter.get(
   validate(listPublicOutletsSchema),
   outletsController.listPublicOutlets
 );
-publicOutletsRouter.get(
-  "/:id/availability",
-  authenticate,
-  availabilityRateLimiter,
-  validate(outletAvailabilitySchema),
-  outletsController.getOutletAvailability
-);
 publicOutletsRouter.get("/:id", validate(outletIdParamSchema), outletsController.getPublicOutlet);
 publicOutletsRouter.get(
   "/:id/reviews",
-  validate(outletIdParamSchema, "params"),
+  validate(outletIdParamSchema),
   validate(listReviewsQuerySchema, "query"),
   reviewsController.listOutletReviews
 );

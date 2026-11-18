@@ -1,4 +1,4 @@
-# ARSITEKTUR & KEPUTUSAN TEKNIS (DECISIONS) — TALLERO AUTO BACKEND
+# ARSITEKTUR & KEPUTUSAN TEKNIS (DECISIONS) â€” TALLERO AUTO BACKEND
 
 Dokumen ini mencatat keputusan arsitektural (Architecture Decision Records) untuk backend bengkel Tallero Auto.
 
@@ -11,7 +11,7 @@ Dokumen ini mencatat keputusan arsitektural (Architecture Decision Records) untu
 - **Keputusan:**
   1. Seluruh kode sumber lama (`src/`, `prisma/schema.prisma`) diisolasi di direktori `_legacy/` hingga Fase 11.
   2. Direktori `_legacy/` dikecualikan dari ESLint, Prettier, Vitest, dan dilarang keras di-import oleh kode baru (divalidasi otomatis oleh `npm run check:structure`).
-  3. Membangun ulang fondasi dengan struktur datar per lapisan sesuai `AGENTS.md §2` (`config/`, `routes/`, `controllers/`, `services/`, `validations/`, `middlewares/`, `utils/`, `jobs/`).
+  3. Membangun ulang fondasi dengan struktur datar per lapisan sesuai `AGENTS.md Â§2` (`config/`, `routes/`, `controllers/`, `services/`, `validations/`, `middlewares/`, `utils/`, `jobs/`).
 
 ---
 
@@ -44,7 +44,7 @@ Dokumen ini mencatat keputusan arsitektural (Architecture Decision Records) untu
 - **Konteks:** Mencegah kebocoran data sensitif (password, token, OTP, cookie) pada file log atau stdout.
 - **Keputusan:**
   1. Menggunakan `pino` dan `pino-http` tanpa `console.log` dalam logika aplikasi.
-  2. Mengaktifkan redaksi otomatis (`[REDACTED]`) untuk semua field sensitif sesuai `AGENTS.md §4.21`.
+  2. Mengaktifkan redaksi otomatis (`[REDACTED]`) untuk semua field sensitif sesuai `AGENTS.md Â§4.21`.
   3. Error tak terduga mengembalikan respons generik `INTERNAL_ERROR` (500) tanpa stack trace ke client.
 
 ---
@@ -52,12 +52,12 @@ Dokumen ini mencatat keputusan arsitektural (Architecture Decision Records) untu
 ## ADR-005: Implementasi Soft Delete, `withDeleted`, dan Global Omit di `src/config/prisma.js`
 
 - **Tanggal:** 2026-11-12
-- **Konteks:** `AGENTS.md §5` mewajibkan filter otomatis `deletedAt: null` untuk entitas soft-delete, konversi `delete/deleteMany` menjadi `update` (termasuk pengosongan `Vehicle.activePlate`), dan helper `withDeleted` untuk admin/restore, sambil tetap melindungi `User.passwordHash`.
+- **Konteks:** `AGENTS.md Â§5` mewajibkan filter otomatis `deletedAt: null` untuk entitas soft-delete, konversi `delete/deleteMany` menjadi `update` (termasuk pengosongan `Vehicle.activePlate`), dan helper `withDeleted` untuk admin/restore, sambil tetap melindungi `User.passwordHash`.
 - **Keputusan:**
   1. `basePrisma` dikonfigurasi dengan global `omit: { user: { passwordHash: true } }` sehingga field hash password tidak pernah terbaca kecuali diminta eksplisit di modul auth (`omit: { passwordHash: false }`).
   2. `prisma` adalah turunan `$extends` dari `basePrisma` yang menyisipkan `deletedAt: null` untuk query baca/hitung/update dan mengonversi `delete/deleteMany` menjadi `update/updateMany` di dalam konteks transaksi aktif (`AsyncLocalStorage` `txStorage` + pembungkus `$transaction`).
   3. `withDeleted` diekspor sebagai client eksplisit (`basePrisma`) tanpa filter soft-delete namun tetap berbagi pool koneksi dan tetap menerapkan global `omit` `passwordHash`.
-  4. `BookingPhoto` juga disertakan dalam `SOFT_DELETE_MODELS` karena skema `AGENTS.md §7` menetapkan `deletedAt` pada model tersebut.
+  4. `BookingPhoto` juga disertakan dalam `SOFT_DELETE_MODELS` karena skema `AGENTS.md Â§7` menetapkan `deletedAt` pada model tersebut.
 
 ---
 
@@ -75,7 +75,7 @@ Dokumen ini mencatat keputusan arsitektural (Architecture Decision Records) untu
 ## ADR-007: Penempatan Token Sesi & Avatar Storage di Layer Flat Architecture
 
 - **Tanggal:** 2026-11-12
-- **Konteks:** `AGENTS.md §2` membatasi ukuran tiap file maksimal ±300 baris dan membolehkan pemecahan logika besar service ke file spesifik dalam `src/services/` tanpa suffix terlarang.
+- **Konteks:** `AGENTS.md Â§2` membatasi ukuran tiap file maksimal Â±300 baris dan membolehkan pemecahan logika besar service ke file spesifik dalam `src/services/` tanpa suffix terlarang.
 - **Keputusan:**
   1. Logika rotasi refresh token, reuse detection, dan pencabutan sesi dipecah ke `src/services/sessionTokens.js`, sedangkan pemrosesan WebP `sharp` & resolusi signed URL berada di `src/services/files.service.js`, sehingga `src/services/auth.service.js` tetap ringkas dan terfokus.
   2. Avatar disimpan dengan kunci UUID tanpa ekstensi di `User.avatarKey` dan berkas fisiknya ditulis sebagai `storage/private/avatars/<uuid>.webp`, sejalan dengan validasi segment `signedUrl.js` dan penghapusan EXIF otomatis oleh `sharp`.
@@ -206,7 +206,6 @@ Dokumen ini mencatat keputusan arsitektural (Architecture Decision Records) untu
      - Menggunakan skema diskriminatif Zod (`z.discriminatedUnion("intent", [...])`) untuk 5 menu intent: `CHECK_SLOT`, `OUTLET_OPEN_STATUS`, `MY_BOOKING_STATUS`, `SERVICE_PRICE_LIST`, dan `MY_NEXT_SERVICE`.
      - Seluruh intent me-reuse langsung service domain yang sudah ada (`slots.js`, `outlets.service.js`, `bookings.service.js`, `catalog.service.js`, `reminders.service.js`).
 
-
 ---
 
 ### ADR-018: Dashboard Analitik, Definisi Pendapatan Bersih, Sanitasi Formula Injection, dan Ekspor Laporan Streaming
@@ -219,7 +218,7 @@ Dokumen ini mencatat keputusan arsitektural (Architecture Decision Records) untu
      - Tip mekanik (`Payment` bertipe `TIP`) dicatat secara terpisah dan secara eksplisit dikeluarkan dari pendapatan bengkel.
   2. Aggregasi Metrik Performa & Dashboard (`GET /admin/dashboard`):
      - Menggunakan Prisma `aggregate` dan `groupBy` terindeks untuk mengukur perbandingan pendapatan hari ini, bulan ini, dan tahun ini terhadap periode sebelumnya beserta persentase pertumbuhannya.
-     - Menyediakan metrik antrian aktif hari ini, tingkat ketidakhadiran (*no-show rate*), rata-rata waktu tunggu pelanggan (*checked-in* s/d *started*), rata-rata durasi pengerjaan servis (*started* s/d *ready*), top 5 layanan terlaris berdasarkan subtotal pendapatan (bukan sekadar kuantitas booking), leaderboard performa mekanik, serta peringatan sparepart stok menipis (`stock <= RULES.LOW_STOCK_THRESHOLD`).
+     - Menyediakan metrik antrian aktif hari ini, tingkat ketidakhadiran (_no-show rate_), rata-rata waktu tunggu pelanggan (_checked-in_ s/d _started_), rata-rata durasi pengerjaan servis (_started_ s/d _ready_), top 5 layanan terlaris berdasarkan subtotal pendapatan (bukan sekadar kuantitas booking), leaderboard performa mekanik, serta peringatan sparepart stok menipis (`stock <= RULES.LOW_STOCK_THRESHOLD`).
      - Semua batasan tanggal dihitung berdasarkan zona waktu bengkel (`RULES.TIMEZONE` = `Asia/Jakarta`).
   3. Perlindungan Formula Injection (CSV / XLSX):
      - Fungsi murni `sanitizeCell` memeriksa setiap nilai sel bertipe string. Bila sel diawali dengan karakter risiko formula (`=`, `+`, `-`, `@`), karakter tersebut otomatis diprefiks dengan tanda petik tunggal `'` untuk menetralisir eksekusi rumus/DDE di aplikasi lembar kerja.
@@ -231,3 +230,53 @@ Dokumen ini mencatat keputusan arsitektural (Architecture Decision Records) untu
   5. Privasi Tip Mekanik (`GET /staff/me/tips`):
      - Staf mekanik hanya dapat mengakses data tip yang dialokasikan ke dirinya (`recipientMechanicId: actor.id`).
      - Bentuk respons menggunakan Prisma `select` ketat (`staffTipSelect`) yang hanya menampilkan ID pembayaran, order ID, nominal tip, status, tanggal pembayaran, dan kode booking, tanpa pernah menyertakan nama lengkap, email, nomor telepon, atau alamat pelanggan.
+
+---
+
+### ADR-019: Standarisasi Tautan Email, Deep Link Mobile, dan Konfigurasi Cookie Refresh Token (Fase I-1)
+
+- **Tanggal:** 2026-11-14
+- **Konteks:**
+  Frontend Web (Next.js 16) berjalan pada port 3000 secara default, sedangkan backend API berjalan pada port 5000. Untuk pengujian mobile (Expo) dan web, tautan email (reset password) dan deep link harus selaras dengan rute klien, cookie sesi refresh token harus dapat melintasi port development yang berbeda tanpa melanggar kebijakan SameSite browser, dan gap field master data (`managerName` pada Outlet, `badge`/`imageUrl`/`checklist` pada Service) harus disinkronisasikan.
+- **Keputusan:**
+  1. Tautan Reset Password Web & Mobile Deep Link:
+     - Tautan Web diselaraskan ke `${WEB_URL}/reset-password?token=${rawToken}` (di mana `WEB_URL` default adalah `http://localhost:3000`).
+     - Tautan Mobile Deep Link menggunakan skema `tallero://reset-password?token=${rawToken}` sesuai spesifikasi `app.json` Expo (`scheme: "tallero"`).
+  2. Pengaturan Cookie Refresh Token:
+     - Cookie bersifat `httpOnly: true` (tidak dapat diakses oleh skrip JavaScript di browser guna memitigasi serangan XSS).
+     - Path cookie dibatasi ketat ke `/api/v1/auth` sehingga browser hanya mengirimkan cookie pada endpoint refresh dan logout.
+     - Variabel lingkungan `COOKIE_SAME_SITE` (default `lax` pada dev localhost lintas port, `strict` pada produksi), `COOKIE_PATH`, `COOKIE_DOMAIN`, dan `COOKIE_SECURE` disediakan agar perilaku cookie dapat disesuaikan tanpa modifikasi kode sumber.
+  3. Perluasan Field Master Data:
+     - Menambahkan field `managerName` (`VARCHAR(100)`) pada model `Outlet` untuk menampilkan nama kepala cabang di UI admin.
+     - Menambahkan field `badge` (`VARCHAR(50)`), `imageUrl` (`VARCHAR(500)`), dan `checklist` (`Json`) pada model `Service` untuk mendukung katalog pemasaran di antarmuka pelanggan dan admin.
+  4. Aksesibilitas Jaringan Lokal & Header CORS:
+     - Server backend mendengarkan pada host `0.0.0.0` (dikonfigurasi via `HOST` di `.env`) agar dapat diakses dari emulator Android (`10.0.2.2:5000`), simulator iOS (`localhost:5000`), dan perangkat fisik via IP LAN lokal.
+     - Meng-expose header `Content-Disposition` pada konfigurasi CORS agar browser frontend dapat membaca nama file unduhan (PDF invoice dan berkas ekspor laporan).
+
+### ADR-020: Perbaikan transaksi dan integrasi web (18 November 2026)
+
+- Kunci customer lalu outlet menjaga batas booking lintas outlet. Pembayaran memakai kunci booking; invoice memakai advisory transaction lock bersama. Harga tetap berasal dari snapshot server.
+- Gross adalah penerimaan invoice PAID maupun yang kemudian REFUNDED pada paidAt. Refund dikurangi sekali pada periode pengembalian; tip dipisahkan. Ini memperjelas dan menggantikan rumus status pada ADR-018.
+- Query availability memakai hari lokal outlet, sedangkan kolom date closure/queueDate mempertahankan semantik tanggal kalender.
+- PostgreSQL test wajib tersedia; kegagalan setup tidak boleh berubah menjadi tes lulus tanpa eksekusi.
+- Database lokal lama tallero_db dipertahankan. Karena skemanya tidak cocok dan seluruh tabelnya kosong, aplikasi memakai database baru tallero_dev dengan initial migration. TEST_DATABASE_URL tetap milik pengguna.
+- Frontend Next.js memakai cookie refresh httpOnly, access token dalam memori, refresh single-flight, role guard, dan event Socket.IO. WEB_URL lokal adalah http://localhost:3000.
+- Rincian perbaikan, pengujian, dan batasan eksternal ada di VERIFICATION_2026-11-18.md. Tidak ada jaminan perangkat lunak bebas bug 100%.
+
+### ADR-021: Kode provider Midtrans dan setup Gmail (18 November 2026)
+
+- Status API Midtrans dapat mengirim HTTP 200 dengan kode provider 404 sebelum pemilihan metode Snap. Transport memeriksa kode JSON, menolak respons/order yang tidak valid, dan mempertahankan payment lokal PENDING ketika transaksi Core belum ada. Pengujian tidak mengubah database development.
+- Driver Gmail tetap dinonaktifkan sampai refresh token valid; pemeriksaan saat ini ditolak invalid_grant. Redirect Playground harus didaftarkan persis pada client Web application yang sama. Petunjuk ada pada EMAIL_SETUP.md.
+- Client Key tidak dihapus meski alur redirect Snap belum memakainya, karena disiapkan untuk embed Snap/Core API. Nilai production perlu diganti sandbox sebelum digunakan. Tidak menebak atau mengubah key/token pengguna.
+
+### ADR-022: Log HTTP ringkas dan SQL opt-in (18 November 2026)
+
+- Development memakai info secara default agar satu login/dashboard tidak memenuhi terminal dengan query SQL dan seluruh header HTTP. `LOG_LEVEL` dapat diatur; `LOG_SQL_QUERIES` false secara default dan hanya berlaku pada development.
+- Serializer HTTP hanya menyertakan request ID, method, path tanpa query string dan status respons. Ini juga mencegah cookie respons serta token pada query ikut dicetak. Error dan warn tetap dicatat.
+- Verifikasi login admin/dashboard HTTP 200, pemeriksaan tidak adanya marker cookie/query token di log, dan suite backend dilakukan setelah perubahan. Tidak ada perubahan endpoint atau data bisnis.
+
+### ADR-023: Kontrak JWT yang sama pada HTTP dan Socket.IO (18 November 2026)
+
+- Socket.IO menggunakan verifyAccessToken yang sama dengan middleware HTTP. Token aplikasi menyimpan ID pada subject sub, bukan userId mentah; parser bersama memvalidasi ID positif dan tokenVersion sebelum query.
+- Fixture unit Socket.IO memakai signAccessToken aplikasi, sehingga tidak lagi membentuk kontrak token sendiri yang berbeda dari login. Ditambahkan lima kasus subject tidak valid yang harus ditolak tanpa query Prisma.
+- Verifikasi jaringan memakai token hasil login admin nyata pada proses dev pengguna, ditambah penolakan token ditandatangani tanpa subject. Perbaikan sebelumnya pada logging tidak cukup untuk menemukan masalah ini; pesan Prisma id undefined pada lampiran mengidentifikasi akar masalah.

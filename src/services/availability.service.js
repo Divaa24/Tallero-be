@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
+import prisma from "../config/prisma.js";
 import RULES from "../config/rules.js";
-import { BadRequestError, BusinessRuleError } from "../utils/errors.js";
+import { BadRequestError, BusinessRuleError, NotFoundError } from "../utils/errors.js";
 
 const parseTimeToMinutes = (hhmm) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -233,7 +234,82 @@ export const validateAndComputeBookingSlot = ({
   };
 };
 
+/**
+ * GET /outlets/:id/availability?date&serviceIds
+ * Menghitung ketersediaan slot bengkel secara komprehensif untuk satu hari
+ */
+export const getOutletAvailability = async ({ outletId, date, dateStr, serviceIds = [] }) => {
+  const targetDate = date || dateStr;
+  const outlet = await prisma.outlet.findFirst({
+    where: { id: outletId, isActive: true, deletedAt: null },
+  });
+
+  if (!outlet) {
+    throw new NotFoundError("Outlet tidak ditemukan atau tidak aktif", "OUTLET_NOT_FOUND");
+  }
+
+  const serviceIdList = Array.isArray(serviceIds)
+    ? serviceIds
+    : typeof serviceIds === "string"
+      ? serviceIds
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : typeof serviceIds === "number"
+        ? [serviceIds]
+        : [];
+
+  const [closures, existingBookings, selectedServices] = await Promise.all([
+    prisma.outletClosure.findMany({
+      where: { outletId, date: new Date(`${targetDate}T00:00:00.000Z`) },
+    }),
+    prisma.booking.findMany({
+      where: {
+        outletId,
+        scheduledAt: {
+          gte: DateTime.fromISO(targetDate, { zone: outlet.timezone })
+            .startOf("day")
+            .toUTC()
+            .toJSDate(),
+          lte: DateTime.fromISO(targetDate, { zone: outlet.timezone })
+            .endOf("day")
+            .toUTC()
+            .toJSDate(),
+        },
+        status: { notIn: ["CANCELLED", "NO_SHOW"] },
+      },
+      select: { scheduledAt: true },
+    }),
+    serviceIdList.length > 0
+      ? prisma.service.findMany({
+          where: { id: { in: serviceIdList.map(Number) }, isActive: true },
+          select: { estimatedMinutes: true },
+        })
+      : [],
+  ]);
+
+  const totalEstimatedMinutes = selectedServices.reduce(
+    (acc, s) => acc + (s.estimatedMinutes || 0),
+    0
+  );
+
+  const slotResult = generateOutletSlots({
+    outlet,
+    dateStr: targetDate,
+    closures,
+    existingBookings,
+    serviceIds: serviceIdList,
+    now: new Date(),
+  });
+
+  return {
+    ...slotResult,
+    totalEstimatedMinutes,
+  };
+};
+
 export default {
   generateOutletSlots,
   validateAndComputeBookingSlot,
+  getOutletAvailability,
 };

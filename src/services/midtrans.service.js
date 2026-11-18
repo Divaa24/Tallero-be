@@ -138,16 +138,26 @@ export const getStatus = async (orderId) => {
 
     const body = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
+    const providerCode = Number(body.status_code);
+    if (!res.ok || (Number.isFinite(providerCode) && providerCode >= 400)) {
+      const notFound = res.status === 404 || providerCode === 404;
       logger.warn(
         { status: res.status, body, orderId },
         "Gagal mendapatkan status transaksi dari Midtrans Core API"
       );
       throw new AppError(
         body.status_message || "Transaksi tidak ditemukan di sistem Midtrans",
-        res.status === 404 ? 404 : 502,
-        res.status === 404 ? "PAYMENT_NOT_FOUND" : "MIDTRANS_GATEWAY_ERROR",
+        notFound ? 404 : 502,
+        notFound ? "PAYMENT_NOT_FOUND" : "MIDTRANS_GATEWAY_ERROR",
         body
+      );
+    }
+
+    if (typeof body.transaction_status !== "string" || body.order_id !== orderId) {
+      throw new AppError(
+        "Respons status pembayaran Midtrans tidak valid",
+        502,
+        "MIDTRANS_GATEWAY_ERROR"
       );
     }
 

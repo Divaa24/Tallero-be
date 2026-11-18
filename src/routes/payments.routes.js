@@ -4,6 +4,7 @@
 // ==============================================================================
 
 import { Router } from "express";
+import authorize from "../middlewares/authorize.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { validate } from "../middlewares/validate.js";
 import paymentsController from "../controllers/payments.controller.js";
@@ -24,6 +25,7 @@ paymentsRouter.post("/midtrans/notification", paymentsController.handleNotificat
 paymentsRouter.post(
   "/:orderId/sync",
   authenticate,
+  authorize("CUSTOMER", "ADMIN"),
   validate(syncPaymentParamSchema, "params"),
   paymentsController.syncPayment
 );

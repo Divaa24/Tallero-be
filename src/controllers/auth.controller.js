@@ -1,23 +1,24 @@
 import env from "../config/env.js";
 import RULES from "../config/rules.js";
 import { sendSuccess } from "../utils/response.js";
-import * as registrationOtp from "../services/registrationOtp.js";
+import * as registrationOtp from "../services/registrationOtp.service.js";
 import * as authService from "../services/auth.service.js";
-import * as sessionTokens from "../services/sessionTokens.js";
+import * as sessionTokens from "../services/sessionTokens.service.js";
 
 export const REFRESH_COOKIE_NAME = "refreshToken";
 
-const isWebClient = (req) => req.get("x-client")?.toLowerCase() === "web";
+export const isWebClient = (req) => req.get("x-client")?.toLowerCase() === "web";
 
-const buildRefreshCookieOptions = () => ({
+export const buildRefreshCookieOptions = () => ({
   httpOnly: true,
-  secure: env.NODE_ENV === "production",
-  sameSite: "strict",
-  path: "/api/v1/auth",
+  secure: env.COOKIE_SECURE !== undefined ? env.COOKIE_SECURE : env.NODE_ENV === "production",
+  sameSite: env.COOKIE_SAME_SITE || (env.NODE_ENV === "production" ? "strict" : "lax"),
+  path: env.COOKIE_PATH || "/api/v1/auth",
+  domain: env.COOKIE_DOMAIN || undefined,
   maxAge: RULES.REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000,
 });
 
-const clearRefreshCookie = (res) => {
+export const clearRefreshCookie = (res) => {
   const { maxAge: _ignored, ...clearOptions } = buildRefreshCookieOptions();
   res.clearCookie(REFRESH_COOKIE_NAME, clearOptions);
 };

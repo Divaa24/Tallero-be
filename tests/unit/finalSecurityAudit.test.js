@@ -17,7 +17,7 @@ import { createBookingSchema } from "../../src/validations/bookings.validation.j
 import { reportsSummaryQuerySchema } from "../../src/validations/reports.validation.js";
 import sharp from "sharp";
 import { fileTypeFromBuffer } from "file-type";
-import { isTransitionAllowed } from "../../src/services/bookingStateMachine.js";
+import { isTransitionAllowed } from "../../src/services/bookingStateMachine.service.js";
 
 const storeRef = vi.hoisted(() => ({ current: null }));
 
@@ -38,6 +38,9 @@ vi.mock("../../src/config/prisma.js", () => {
     default: mockProxy,
     prisma: mockProxy,
     lockOutlet: async () => {},
+    lockCustomer: vi.fn(),
+    lockBooking: vi.fn(),
+    lockInvoices: vi.fn(),
   };
 });
 
@@ -52,8 +55,20 @@ describe("Fase 11 — Audit Keamanan & Kualitas Final", () => {
     adminUser = { id: 1, name: "Admin", role: "ADMIN", outletId: null, isActive: true };
     customerA = { id: 10, name: "Customer A", role: "CUSTOMER", outletId: null, isActive: true };
     customerB = { id: 20, name: "Customer B", role: "CUSTOMER", outletId: null, isActive: true };
-    mechanicOutlet1 = { id: 30, name: "Mekanik Barat", role: "MECHANIC", outletId: 1, isActive: true };
-    mechanicOutlet2 = { id: 40, name: "Mekanik Timur", role: "MECHANIC", outletId: 2, isActive: true };
+    mechanicOutlet1 = {
+      id: 30,
+      name: "Mekanik Barat",
+      role: "MECHANIC",
+      outletId: 1,
+      isActive: true,
+    };
+    mechanicOutlet2 = {
+      id: 40,
+      name: "Mekanik Timur",
+      role: "MECHANIC",
+      outletId: 2,
+      isActive: true,
+    };
   });
 
   // ============================================================================
@@ -128,7 +143,9 @@ describe("Fase 11 — Audit Keamanan & Kualitas Final", () => {
       const checkMechanicOutletScope = (actor, booking) => {
         if (actor.role === "ADMIN") return true;
         if (actor.role === "MECHANIC" && actor.outletId !== booking.outletId) {
-          throw new ForbiddenError("Mekanik tidak berwenang menangani booking dari outlet cabang lain");
+          throw new ForbiddenError(
+            "Mekanik tidak berwenang menangani booking dari outlet cabang lain"
+          );
         }
         return true;
       };
@@ -137,8 +154,12 @@ describe("Fase 11 — Audit Keamanan & Kualitas Final", () => {
       expect(checkMechanicOutletScope(mechanicOutlet1, bookingOutlet1)).toBe(true);
 
       // Mekanik Outlet 2 DITOLAK saat mencoba menangani booking Outlet 1
-      expect(() => checkMechanicOutletScope(mechanicOutlet2, bookingOutlet1)).toThrow(ForbiddenError);
-      expect(() => checkMechanicOutletScope(mechanicOutlet2, bookingOutlet1)).toThrow(/cabang lain/i);
+      expect(() => checkMechanicOutletScope(mechanicOutlet2, bookingOutlet1)).toThrow(
+        ForbiddenError
+      );
+      expect(() => checkMechanicOutletScope(mechanicOutlet2, bookingOutlet1)).toThrow(
+        /cabang lain/i
+      );
     });
   });
 
@@ -190,7 +211,9 @@ describe("Fase 11 — Audit Keamanan & Kualitas Final", () => {
       };
 
       // Aturan AGENTS.md §6: Customer melihat nama mekanik + rating-nya, BUKAN email/telepon
-      const customerViewMechanic = (({ id, name, rating }) => ({ id, name, rating }))(rawMechanicStaff);
+      const customerViewMechanic = (({ id, name, rating }) => ({ id, name, rating }))(
+        rawMechanicStaff
+      );
 
       expect(customerViewMechanic).toEqual({
         id: 30,
@@ -215,9 +238,12 @@ describe("Fase 11 — Audit Keamanan & Kualitas Final", () => {
       };
 
       // Prisma select payments
-      const sanitizedPayment = (({ id, orderId, amount, status }) => ({ id, orderId, amount, status }))(
-        paymentRecord
-      );
+      const sanitizedPayment = (({ id, orderId, amount, status }) => ({
+        id,
+        orderId,
+        amount,
+        status,
+      }))(paymentRecord);
 
       expect(sanitizedPayment).not.toHaveProperty("rawNotification");
     });
@@ -321,7 +347,10 @@ describe("Fase 11 — Audit Keamanan & Kualitas Final", () => {
       // Update bersyarat: UPDATE bookings SET status = 'IN_PROGRESS', mechanic_id = :mechId WHERE id = :id AND status = 'CHECKED_IN'
       const claimBookingConditionally = async (mechanicId) => {
         if (bookingStatus !== "CHECKED_IN") {
-          throw new ConflictError("Pekerjaan telah diambil oleh mekanik lain", "BOOKING_ALREADY_CLAIMED");
+          throw new ConflictError(
+            "Pekerjaan telah diambil oleh mekanik lain",
+            "BOOKING_ALREADY_CLAIMED"
+          );
         }
         bookingStatus = "IN_PROGRESS";
         assignedMechanicId = mechanicId;
@@ -368,8 +397,8 @@ describe("Fase 11 — Audit Keamanan & Kualitas Final", () => {
         email: "hacker@evil.test",
         password: "Password123!",
         phone: "+628129999888",
-        role: "ADMIN",             // Upaya mass assignment privilege escalation
-        isVerified: true,          // Upaya bypass OTP
+        role: "ADMIN", // Upaya mass assignment privilege escalation
+        isVerified: true, // Upaya bypass OTP
         failedLoginCount: 0,
       };
 
@@ -394,10 +423,10 @@ describe("Fase 11 — Audit Keamanan & Kualitas Final", () => {
 
     it("menolak angka negatif, NaN, Infinity, dan array kosong pada skema booking", () => {
       const invalidBookingPayload = {
-        outletId: -1,                  // Negatif
-        vehicleId: NaN,                // NaN
-        scheduledAt: "bukan-tanggal",  // Invalid date
-        serviceIds: [],                // Array kosong
+        outletId: -1, // Negatif
+        vehicleId: NaN, // NaN
+        scheduledAt: "bukan-tanggal", // Invalid date
+        serviceIds: [], // Array kosong
       };
 
       const parseResult = createBookingSchema.body.safeParse(invalidBookingPayload);

@@ -24,6 +24,14 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
 
+  if (err.type === "entity.too.large") {
+    return sendError(res, {
+      statusCode: 413,
+      code: "PAYLOAD_TOO_LARGE",
+      message: "Ukuran data melebihi batas yang diizinkan",
+    });
+  }
+
   if (err.name === "ZodError" || Array.isArray(err.issues)) {
     const details = (err.issues || []).map((issue) => ({
       field: issue.path.join("."),

@@ -18,7 +18,7 @@ import {
   UnauthorizedError,
 } from "../utils/errors.js";
 import { buildPasswordResetEmail, sendMail } from "./mail.service.js";
-import { issueSessionTokens, revokeAllUserSessions } from "./sessionTokens.js";
+import { issueSessionTokens, revokeAllUserSessions } from "./sessionTokens.service.js";
 import { removeAvatarFile, saveProcessedAvatar } from "./files.service.js";
 
 /**
@@ -91,17 +91,31 @@ export const login = async ({ email, password, meta = {} }) => {
   }
 
   if (!isPasswordValid) {
-    const baseFailures = user.lockedUntil && user.lockedUntil <= now ? 0 : user.failedLoginCount;
-    const nextFailures = baseFailures + 1;
-    const shouldLock = nextFailures >= RULES.LOGIN_MAX_FAILS;
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        failedLoginCount: nextFailures,
-        lockedUntil: shouldLock ? new Date(now.getTime() + RULES.LOCK_MINUTES * 60 * 1000) : null,
-      },
-    });
+    let current = user;
+    while (current && !(current.lockedUntil && current.lockedUntil > now)) {
+      const baseFailures =
+        current.lockedUntil && current.lockedUntil <= now ? 0 : current.failedLoginCount;
+      const nextFailures = baseFailures + 1;
+      const claimed = await prisma.user.updateMany({
+        where: {
+          id: user.id,
+          failedLoginCount: current.failedLoginCount,
+          lockedUntil: current.lockedUntil,
+        },
+        data: {
+          failedLoginCount: nextFailures,
+          lockedUntil:
+            nextFailures >= RULES.LOGIN_MAX_FAILS
+              ? new Date(now.getTime() + RULES.LOCK_MINUTES * 60000)
+              : null,
+        },
+      });
+      if (claimed.count === 1) break;
+      current = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { failedLoginCount: true, lockedUntil: true },
+      });
+    }
 
     throw new UnauthorizedError("Email atau password salah", "INVALID_CREDENTIALS");
   }
@@ -121,13 +135,25 @@ export const login = async ({ email, password, meta = {} }) => {
   }
 
   return prisma.$transaction(async (tx) => {
-    const updatedUser = await tx.user.update({
-      where: { id: user.id },
-      data: {
-        failedLoginCount: 0,
-        lockedUntil: null,
-        lastLoginAt: now,
+    const claimed = await tx.user.updateMany({
+      where: {
+        id: user.id,
+        passwordHash: user.passwordHash,
+        tokenVersion: user.tokenVersion,
+        isActive: true,
+        isVerified: true,
+        OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }],
       },
+      data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: now },
+    });
+    if (claimed.count !== 1) {
+      throw new UnauthorizedError(
+        "Sesi akun telah berubah. Silakan coba login kembali.",
+        "INVALID_CREDENTIALS"
+      );
+    }
+    const updatedUser = await tx.user.findUnique({
+      where: { id: user.id },
       select: { ...publicUserSelect, tokenVersion: true },
     });
 

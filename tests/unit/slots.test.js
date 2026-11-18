@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import { describe, expect, it } from "vitest";
-import { generateOutletSlots, validateAndComputeBookingSlot } from "../../src/services/slots.js";
+import { generateOutletSlots, validateAndComputeBookingSlot } from "../../src/services/availability.service.js";
 
 describe("slots service (Luxon slot calculations & validations)", () => {
   const baseOutlet = {

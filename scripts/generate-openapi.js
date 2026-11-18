@@ -892,6 +892,8 @@ export const ALL_ENDPOINTS = [
     body: z.object({
       name: z.string(),
       address: z.string(),
+      phone: z.string().optional(),
+      managerName: z.string().optional(),
       latitude: z.number(),
       longitude: z.number(),
       openDays: z.array(z.number()),
@@ -909,7 +911,12 @@ export const ALL_ENDPOINTS = [
     summary: "Perbarui informasi cabang outlet",
     auth: true,
     params: z.object({ id: z.coerce.number() }),
-    body: z.object({ name: z.string().optional(), slotCapacity: z.number().optional() }),
+    body: z.object({
+      name: z.string().optional(),
+      phone: z.string().optional(),
+      managerName: z.string().optional(),
+      slotCapacity: z.number().optional(),
+    }),
     responses: jsonResponses(z.object({ id: z.number() })),
   },
   {
@@ -1015,6 +1022,10 @@ export const ALL_ENDPOINTS = [
     body: z.object({
       categoryId: z.number().int().positive(),
       name: z.string(),
+      description: z.string().optional(),
+      badge: z.string().optional(),
+      imageUrl: z.string().optional(),
+      checklist: z.array(z.string()).optional(),
       price: z.number().int().positive(),
       estimatedMinutes: z.number().int().positive(),
       vehicleType: z.enum(["CAR", "MOTORCYCLE"]).optional(),
@@ -1030,7 +1041,15 @@ export const ALL_ENDPOINTS = [
     summary: "Ubah harga atau spesifikasi layanan servis",
     auth: true,
     params: z.object({ id: z.coerce.number() }),
-    body: z.object({ price: z.number().int().optional(), estimatedMinutes: z.number().int().optional() }),
+    body: z.object({
+      name: z.string().optional(),
+      description: z.string().optional(),
+      badge: z.string().optional(),
+      imageUrl: z.string().optional(),
+      checklist: z.array(z.string()).optional(),
+      price: z.number().int().optional(),
+      estimatedMinutes: z.number().int().optional(),
+    }),
     responses: jsonResponses(z.object({ id: z.number() })),
   },
   {
